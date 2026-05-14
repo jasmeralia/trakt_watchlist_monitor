@@ -1,14 +1,13 @@
 import time
 from pricing import check_prices
+from settings import settings
 
-INTERVAL_HOURS = int(float(
-    __import__("os").getenv("CHECK_INTERVAL_HOURS", "24")
-))
 
-def main():
+def main() -> None:
     while True:
         check_prices()
-        time.sleep(INTERVAL_HOURS * 3600)
+        time.sleep(settings.check_interval_hours * 3600)
+
 
 if __name__ == "__main__":
     main()
