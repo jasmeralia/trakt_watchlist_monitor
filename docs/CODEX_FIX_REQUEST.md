@@ -1,43 +1,63 @@
-# Codex Fix Request
+# Codex Fix Request — Adversarial Review
 
 ## Source of Truth
 
-- `docs/DESIGN.md` — architecture, module contracts, business logic
-- `docs/REVIEW.md` — full review findings with severity ratings
+- `docs/DESIGN.md` — architecture and module contracts
+- `docs/ADVERSARIAL_REVIEW.md` — full adversarial review findings
 
 ## Scope
 
-Fixes identified in `docs/REVIEW.md` that require no live credentials. The JustWatch GraphQL
-schema validation (which requires a real API call) is explicitly out of scope here.
+Fixes for findings that have a clear correct answer and do not require config schema
+changes or DB migrations. Items that require design decisions (token persistence,
+currency key, SMTP_SSL, season support) are explicitly out of scope here.
 
 ## Checklist
 
-- [x] **notify-sendmessage** `app/notify.py`: Replace `smtp.sendmail(from, to, msg.as_string())` with `smtp.send_message(msg)` — the idiomatic API for `EmailMessage`. Update `tests/test_notify.py` if the assertion on `sendmail` needs to change.
+- [x] **main-loop-resilience** `app/main.py`: Wrap the body of the `while True` loop in a
+  `try/except Exception` that logs the error to stderr and sleeps before retrying, so a
+  transient Trakt failure or DB open error does not kill the service permanently.
 
-- [x] **notify-nonfatal** `app/pricing.py`: Wrap `notify.send_alert()` in a `try/except` so an SMTP failure is caught, logged to stderr, and does not abort the run. The `db.upsert_price()` call must still execute after a notification failure.
+- [x] **smtp-timeout** `app/notify.py`: Pass a `timeout` argument (e.g. `30`) to
+  `smtplib.SMTP()` so a stalled server cannot block the monitoring loop indefinitely.
 
-- [x] **per-item-errors** `app/pricing.py`: Wrap each item's processing block (from `justwatch.get_amazon_prices()` through the final `db.upsert_price()`) in a `try/except` that logs the error and `continue`s to the next item, so one bad item does not abort the whole run.
+- [x] **graphql-errors** `app/justwatch.py`: After `response.raise_for_status()`, inspect
+  the parsed JSON for a top-level `"errors"` key. If present, log the first error message
+  to stderr and return `[]` rather than silently falling through as if no offers were found.
 
-- [x] **upsert-on-increase** `app/pricing.py`: Move `db.upsert_price()` outside the `if current_price < last_price:` block so price increases are stored too. Only the notification logic (threshold check + `send_alert` + `log_notification`) stays inside the `if` block.
+- [x] **price-parse-locale** `app/justwatch.py`: Fix `_parse_price()` so that
+  comma-decimal strings like `"€9,99"` and thousands-separator strings like `"1,299.00"`
+  do not produce bogus numbers. The correct approach: strip all non-digit, non-period, and
+  non-comma characters, replace any comma that acts as a decimal separator (rightmost
+  comma followed by exactly two digits at end of string) with a period, then remove
+  remaining commas, and parse the result. Add tests for both formats.
 
-- [x] **db-tests** `tests/test_db.py`: Add two tests:
-  1. Upsert the same `(trakt_id, media_type, quality)` key twice with different prices; assert `get_last_price` returns the second price (verifies ON CONFLICT REPLACE).
-  2. After `log_notification` at $10.00, assert `was_notified(..., price=7.99)` returns `True` (price strictly below the logged price, verifying the `<= ?` query).
+- [ ] **zero-division-guard** `app/pricing.py`: Guard against `last_price == 0.0` in the
+  discount-percentage calculation inside `check_prices()`. If `last_price` is zero, skip
+  the notification logic (a zero baseline is not a meaningful reference price) and still
+  call `upsert_price`.
 
-- [x] **pricing-tests** `tests/test_pricing.py`: Add four `TestCheckPrices` test cases:
-  1. First observation (`get_last_price` returns `None`): assert `send_alert` is NOT called and `upsert_price` IS called.
-  2. Deduplication (`was_notified` returns `True`): assert `send_alert` is NOT called even though threshold is met.
-  3. No JustWatch prices (`get_amazon_prices` returns `[]`): assert `send_alert` is NOT called and `upsert_price` is NOT called.
-  4. No `tmdb_id` (`tmdb_id` is `None` in the watchlist item): assert `send_alert` is NOT called and `upsert_price` is NOT called.
+- [ ] **upsert-after-alert** `app/pricing.py` + `tests/test_pricing.py`: The critical bug:
+  when the threshold is met and alert sending fails, `upsert_price` still runs, permanently
+  preventing future re-alerts. Fix: only call `upsert_price` when the alert was either
+  (a) sent successfully, or (b) not required (below threshold, first observation, price
+  increase). When an alert was required but the send failed, skip `upsert_price` so the
+  next run retries. Update the notify-failure test to assert that `upsert_price` is NOT
+  called when send fails.
 
-- [x] **trakt-session** `app/trakt.py`: Reuse a single `requests.Session` within `_request_with_refresh` (create once, use for both the initial request and the retry) instead of creating two independent sessions. Update tests if needed.
+- [ ] **season-log** `app/trakt.py`: In `_normalize_watchlist_item()`, add an explicit
+  `elif item["type"] not in {"movie", "show"}` branch that logs the unsupported type to
+  stderr and returns `None`, rather than falling through silently.
 
-- [x] **justwatch-cleanup** `app/justwatch.py`: Remove the dead `nodes` branch from `_first_title()` since the GraphQL query only requests `edges { node { ... } }`. Add a comment to `AMAZON_PACKAGES` noting the values are unverified against the live API and may need updating.
+- [ ] **select-cheapest-quality** `app/pricing.py` `select_best_quality()`: When multiple
+  offers share the same quality tier, select the one with the lowest price rather than the
+  first encountered. Update or add a test for this case.
 
 ## Constraints
 
-- Do not touch the JustWatch GraphQL query shape or `technicalName` values — those require live API validation.
-- Do not refactor unrelated code.
+- Do not add new config fields or modify pydantic Settings.
+- Do not change the DB schema or add migrations.
+- Do not add SMTP_SSL support (out of scope).
+- Do not implement season lookup via JustWatch (out of scope).
 - All changes must pass `make lint-fix && make lint && make test`.
 - Follow existing project style (typed, ruff-formatted, pylint-clean).
 
@@ -49,22 +69,7 @@ schema validation (which requires a real API call) is explicitly out of scope he
 
 ## Completed by Codex
 
-- Completed `notify-sendmessage`: `send_alert` now uses `smtp.send_message(message)`, and the notify test asserts the generated `EmailMessage` content.
-- Completed `notify-nonfatal`: `check_prices` now logs SMTP alert failures to stderr,
-  skips notification logging when sending fails, and still upserts the observed price.
-- Completed `per-item-errors`: `check_prices` now logs per-item processing failures to stderr
-  and continues with later watchlist items.
-- Completed `upsert-on-increase`: `check_prices` now persists observed price increases without
-  sending alerts, with a pricing test covering the increase path.
-- Completed `db-tests`: added database coverage for replacing an existing price on upsert,
-  and aligned `was_notified` so lower prices are treated as already notified after a higher
-  logged notification price.
-- Completed `pricing-tests`: added `check_prices` coverage for first observations,
-  deduplicated notifications, items with no JustWatch prices, and watchlist items without TMDB
-  IDs.
-- Completed `trakt-session`: `_request_with_refresh` now creates one `requests.Session` and
-  reuses it for both the initial request and post-refresh retry, with test coverage for the
-  single session factory call.
-- Completed `justwatch-cleanup` on 2026-05-15: removed the unreachable `nodes` handling from
-  `_first_title()` and documented that the Amazon package technical names are unverified against
-  the live JustWatch API.
+- Completed `main-loop-resilience` on 2026-05-15: `main()` now catches and logs unexpected
+  loop failures with traceback details, then waits the configured interval before retrying.
+- Completed `smtp-timeout` on 2026-05-15: SMTP alert delivery now uses a 30-second
+  connection timeout.

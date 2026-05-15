@@ -1,4 +1,5 @@
 import re
+import sys
 from typing import Any
 
 import requests
@@ -34,6 +35,12 @@ def get_amazon_prices(tmdb_id: int, media_type: str) -> list[PriceOffer]:
 
     payload = response.json()
     if not isinstance(payload, dict):
+        return []
+    if "errors" in payload:
+        print(
+            f"JustWatch GraphQL error: {_graphql_error_message(payload['errors'])}",
+            file=sys.stderr,
+        )
         return []
 
     data = payload.get("data")
@@ -99,14 +106,31 @@ def _parse_price(raw: object) -> float | None:
         return float(raw)
     if not isinstance(raw, str):
         return None
-    # retailPrice is a locale-formatted string e.g. "$9.99", "CA$ 12.99", "£6.99"
-    m = re.search(r"\d+(?:\.\d+)?", raw)
-    if m is None:
+    # retailPrice is locale-formatted, e.g. "$9.99", "€9,99", "1,299.00".
+    normalized = re.sub(r"[^\d.,]", "", raw)
+    if not normalized:
         return None
+    if re.search(r",\d{2}$", normalized):
+        whole, cents = normalized.rsplit(",", maxsplit=1)
+        normalized = f"{whole}.{cents}".replace(",", "")
+    else:
+        normalized = normalized.replace(",", "")
     try:
-        return float(m.group())
+        return float(normalized)
     except ValueError:
         return None
+
+
+def _graphql_error_message(errors: object) -> str:
+    if isinstance(errors, list) and errors:
+        first_error = errors[0]
+        if isinstance(first_error, dict):
+            message = first_error.get("message")
+            if isinstance(message, str):
+                return message
+        if isinstance(first_error, str):
+            return first_error
+    return "unknown error"
 
 
 # country and platform are required by the JustWatch schema.

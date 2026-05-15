@@ -61,6 +61,16 @@ def test_get_amazon_prices_returns_empty_list_when_not_found(
     assert justwatch.get_amazon_prices(329865, "movie") == []
 
 
+def test_get_amazon_prices_returns_empty_list_for_graphql_errors(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    payload = {"errors": [{"message": "node lookup failed"}], "data": {"node": None}}
+    monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
+
+    assert justwatch.get_amazon_prices(329865, "movie") == []
+    assert "JustWatch GraphQL error: node lookup failed" in capsys.readouterr().err
+
+
 def test_get_amazon_prices_filters_out_non_amazon_offers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -85,6 +95,26 @@ def test_get_amazon_prices_parses_string_price(monkeypatch: pytest.MonkeyPatch) 
 
     result = justwatch.get_amazon_prices(1, "movie")
     assert result == [{"quality": "HD", "price": 12.99, "currency": "USD"}]
+
+
+def test_get_amazon_prices_parses_comma_decimal_price(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _payload([_offer("amazon", "BUY", "HD", "€9,99", "EUR")])
+    monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
+
+    result = justwatch.get_amazon_prices(1, "movie")
+    assert result == [{"quality": "HD", "price": 9.99, "currency": "EUR"}]
+
+
+def test_get_amazon_prices_parses_thousands_separator_price(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _payload([_offer("amazon", "BUY", "HD", "1,299.00", "USD")])
+    monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
+
+    result = justwatch.get_amazon_prices(1, "movie")
+    assert result == [{"quality": "HD", "price": 1299.0, "currency": "USD"}]
 
 
 def test_get_amazon_prices_parses_numeric_price(monkeypatch: pytest.MonkeyPatch) -> None:
