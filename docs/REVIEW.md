@@ -47,16 +47,21 @@ test in `test_db.py` accordingly.
 
 ---
 
-## Remaining: Requires Live API Validation
+## Live API Validation — Completed
 
-**`justwatch.py` GraphQL schema** — the endpoint, field names, `technicalName` values, and
-`contentTypes` enum are unverified against the real JustWatch API. Specific risks:
+Validated against `https://apis.justwatch.com/graphql` on 2026-05-15.
 
-- `technicalName` for Amazon packages: `"amazon"` and `"amazon_prime"` are guesses. Real values
-  may be `"amazon_prime_video"`, `"prime_video"`, or similar.
-- `contentTypes: ["SHOW"]` — JustWatch may use `"TV_SERIES"`.
-- The overall response shape may differ from what the GraphQL query assumes.
+The original implementation was non-functional: `searchTitles(externalIds: {tmdb: ...})` does not
+exist in the schema, `retailPrice` is a formatted string not a float, and `offers` requires
+mandatory `country` and `platform` arguments. All issues fixed in the follow-up commit.
 
-**To validate:** Make a real request to `https://apis.justwatch.com/graphql` with a known TMDB ID
-(no auth required) and compare the response shape to `app/justwatch.py`. The `AMAZON_PACKAGES`
-set and `_content_type()` mapping are the most likely points of failure.
+| Finding | Resolution |
+|---|---|
+| `searchTitles(externalIds:)` does not exist | Replaced with `node(id: "tm{id}")` / `node(id: "ts{id}")` |
+| `retailPrice` is a string e.g. `"$12.99"` | `_parse_price()` strips currency symbol and converts to float |
+| `offers` requires `country` and `platform` | Added `country: US, platform: WEB` |
+| `retailPrice` requires `language` | Added `language: "en"` |
+| `"amazon_prime"` does not exist | Removed; only `"amazon"` confirmed in live data |
+| API returns 403 without browser headers | Added `User-Agent` and `Origin` headers |
+
+**Status: All known issues resolved. No outstanding items.**
