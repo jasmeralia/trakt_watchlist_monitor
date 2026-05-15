@@ -1,5 +1,7 @@
 # Pricing evaluation logic
 
+import smtplib
+import sys
 from typing import Any
 
 import db
@@ -26,6 +28,7 @@ def meets_discount_threshold(original: float, current: float, percent: float) ->
 
 def check_prices() -> None:
     conn = db.init_db(settings.db_path)
+    # pylint: disable=too-many-nested-blocks
     try:
         for item in trakt.get_effective_watchlist():
             trakt_id = item.get("trakt_id")
@@ -36,34 +39,45 @@ def check_prices() -> None:
             if not isinstance(tmdb_id, int):
                 continue
 
-            prices = justwatch.get_amazon_prices(tmdb_id, media_type)
-            best_price = select_best_quality(prices)
-            if best_price is None:
-                continue
+            try:
+                prices = justwatch.get_amazon_prices(tmdb_id, media_type)
+                best_price = select_best_quality(prices)
+                if best_price is None:
+                    continue
 
-            quality = str(best_price["quality"])
-            current_price = float(best_price["price"])
-            currency = str(best_price.get("currency", "USD"))
-            last_price = db.get_last_price(conn, trakt_id, media_type, quality)
-            if last_price is None:
-                db.upsert_price(conn, trakt_id, media_type, quality, current_price, currency)
-                continue
+                quality = str(best_price["quality"])
+                current_price = float(best_price["price"])
+                currency = str(best_price.get("currency", "USD"))
+                last_price = db.get_last_price(conn, trakt_id, media_type, quality)
+                if last_price is None:
+                    db.upsert_price(conn, trakt_id, media_type, quality, current_price, currency)
+                    continue
 
-            if current_price < last_price:
-                drop_percent = (last_price - current_price) / last_price * 100
-                if meets_discount_threshold(
-                    last_price, current_price, settings.discount_threshold_percent
-                ) and not db.was_notified(conn, trakt_id, media_type, quality, current_price):
-                    title = f"Price drop: {item.get('title', 'Watchlist item')}"
-                    body = (
-                        f"{item.get('title', 'Watchlist item')} dropped from "
-                        f"{currency} {last_price:.2f} to {currency} {current_price:.2f} "
-                        f"({drop_percent:.1f}% off)."
-                    )
-                    notify.send_alert(title, body)
-                    db.log_notification(
-                        conn, trakt_id, media_type, quality, current_price, last_price
-                    )
+                if current_price < last_price:
+                    drop_percent = (last_price - current_price) / last_price * 100
+                    if meets_discount_threshold(
+                        last_price, current_price, settings.discount_threshold_percent
+                    ) and not db.was_notified(conn, trakt_id, media_type, quality, current_price):
+                        title = f"Price drop: {item.get('title', 'Watchlist item')}"
+                        body = (
+                            f"{item.get('title', 'Watchlist item')} dropped from "
+                            f"{currency} {last_price:.2f} to {currency} {current_price:.2f} "
+                            f"({drop_percent:.1f}% off)."
+                        )
+                        try:
+                            notify.send_alert(title, body)
+                        except (OSError, smtplib.SMTPException) as exc:
+                            print(
+                                f"Failed to send price alert for {trakt_id}: {exc}",
+                                file=sys.stderr,
+                            )
+                        else:
+                            db.log_notification(
+                                conn, trakt_id, media_type, quality, current_price, last_price
+                            )
                 db.upsert_price(conn, trakt_id, media_type, quality, current_price, currency)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                print(f"Failed to process price for {trakt_id}: {exc}", file=sys.stderr)
+                continue
     finally:
         conn.close()

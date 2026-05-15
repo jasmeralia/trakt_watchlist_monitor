@@ -81,7 +81,7 @@ def was_notified(
         WHERE trakt_id = ?
             AND media_type = ?
             AND quality = ?
-            AND price <= ?
+            AND price >= ?
         LIMIT 1
         """,
         (trakt_id, media_type, quality, price),

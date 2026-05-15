@@ -30,6 +30,16 @@ class FakeSession:
         return self.responses.pop(0)
 
 
+class FakeSessionFactory:
+    def __init__(self, session: FakeSession) -> None:
+        self.session = session
+        self.calls = 0
+
+    def __call__(self) -> FakeSession:
+        self.calls += 1
+        return self.session
+
+
 def test_get_watchlist_fetches_raw_entries(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = [
         {
@@ -91,11 +101,13 @@ def test_get_watchlist_refreshes_token_and_retries_unauthorized(
     refresh_response = FakeResponse(
         {"access_token": "new-access-token", "refresh_token": "new-refresh-token"}
     )
-    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+    session_factory = FakeSessionFactory(session)
+    monkeypatch.setattr(trakt.requests, "Session", session_factory)
     monkeypatch.setattr(trakt.requests, "post", _post_factory(refresh_response))
 
     try:
         assert trakt.get_watchlist() == []
+        assert session_factory.calls == 1
         assert settings.trakt_access_token == "new-access-token"
         assert settings.trakt_refresh_token == "new-refresh-token"
         assert session.requests[1]["headers"]["Authorization"] == "Bearer new-access-token"

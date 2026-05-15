@@ -56,7 +56,8 @@ def _get(path: str) -> list[dict[str, Any]]:
 
 
 def _request_with_refresh(method: str, path: str) -> requests.Response:
-    response = requests.Session().request(
+    session = requests.Session()
+    response = session.request(
         method,
         f"{BASE_URL}{path}",
         headers=_headers(),
@@ -67,7 +68,7 @@ def _request_with_refresh(method: str, path: str) -> requests.Response:
         return response
 
     refresh_token()
-    response = requests.Session().request(
+    response = session.request(
         method,
         f"{BASE_URL}{path}",
         headers=_headers(),

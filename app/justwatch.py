@@ -3,6 +3,7 @@ from typing import Any
 import requests
 
 GRAPHQL_URL = "https://apis.justwatch.com/graphql"
+# These technical names are unverified against the live JustWatch API and may need updating.
 AMAZON_PACKAGES = {"amazon", "amazon_prime"}
 
 PriceOffer = dict[str, str | float]
@@ -56,11 +57,7 @@ def _first_title(payload: dict[Any, Any]) -> dict[Any, Any] | None:
     if isinstance(data, dict):
         search_titles = data.get("searchTitles")
         if isinstance(search_titles, dict):
-            nodes = search_titles.get("nodes")
-            if isinstance(nodes, list) and nodes and isinstance(nodes[0], dict):
-                title = nodes[0]
-            else:
-                title = _first_edge_node(search_titles)
+            title = _first_edge_node(search_titles)
     return title
 
 

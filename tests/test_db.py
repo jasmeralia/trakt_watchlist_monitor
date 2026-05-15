@@ -38,12 +38,33 @@ def test_upsert_then_get_returns_price() -> None:
         conn.close()
 
 
+def test_upsert_replaces_existing_price_for_same_key() -> None:
+    conn = init_db(":memory:")
+    try:
+        upsert_price(conn, 1, "movie", "HD", 9.99)
+        upsert_price(conn, 1, "movie", "HD", 7.99)
+
+        assert get_last_price(conn, 1, "movie", "HD") == 7.99
+    finally:
+        conn.close()
+
+
 def test_was_notified_returns_false_then_true_after_logging() -> None:
     conn = init_db(":memory:")
     try:
         assert was_notified(conn, 1, "movie", "HD", 7.99) is False
 
         log_notification(conn, 1, "movie", "HD", 7.99, 12.99)
+
+        assert was_notified(conn, 1, "movie", "HD", 7.99) is True
+    finally:
+        conn.close()
+
+
+def test_was_notified_returns_true_for_price_below_logged_price() -> None:
+    conn = init_db(":memory:")
+    try:
+        log_notification(conn, 1, "movie", "HD", 10.00, 12.99)
 
         assert was_notified(conn, 1, "movie", "HD", 7.99) is True
     finally:

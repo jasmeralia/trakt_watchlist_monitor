@@ -42,13 +42,11 @@ def test_send_alert_sends_plain_text_email(notify_module: object) -> None:
     smtp_class.assert_called_once_with("smtp.example.com", 587)
     smtp.starttls.assert_called_once_with()
     smtp.login.assert_called_once_with("smtp-user", "smtp-password")
-    smtp.sendmail.assert_called_once()
+    smtp.send_message.assert_called_once()
 
-    from_address, to_address, raw_message = smtp.sendmail.call_args.args
-    assert from_address == "sender@example.com"
-    assert to_address == "recipient@example.com"
-    assert "Subject: Price drop" in raw_message
-    assert "From: sender@example.com" in raw_message
-    assert "To: recipient@example.com" in raw_message
-    assert "Content-Type: text/plain" in raw_message
-    assert "The price dropped to $7.99." in raw_message
+    message = smtp.send_message.call_args.args[0]
+    assert message["Subject"] == "Price drop"
+    assert message["From"] == "sender@example.com"
+    assert message["To"] == "recipient@example.com"
+    assert message.get_content_type() == "text/plain"
+    assert message.get_content() == "The price dropped to $7.99.\n"

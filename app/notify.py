@@ -14,4 +14,4 @@ def send_alert(title: str, body: str) -> None:
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as smtp:
         smtp.starttls()
         smtp.login(settings.smtp_username, settings.smtp_password)
-        smtp.sendmail(settings.smtp_from, settings.smtp_to, message.as_string())
+        smtp.send_message(message)
