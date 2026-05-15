@@ -1,24 +1,33 @@
+import re
 from typing import Any
 
 import requests
 
 GRAPHQL_URL = "https://apis.justwatch.com/graphql"
-# These technical names are unverified against the live JustWatch API and may need updating.
-AMAZON_PACKAGES = {"amazon", "amazon_prime"}
+# "amazon" is the verified technicalName for Amazon buy/rent offers.
+# Amazon-branded channel packages (e.g. amazonscreambox, amazoncineverse) are distinct
+# and intentionally excluded — those are subscription add-on channels, not direct buys.
+AMAZON_PACKAGES = {"amazon"}
 
 PriceOffer = dict[str, str | float]
 
 
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Origin": "https://www.justwatch.com",
+}
+
+
 def get_amazon_prices(tmdb_id: int, media_type: str) -> list[PriceOffer]:
+    node_id = _node_id(tmdb_id, media_type)
     response = requests.post(
         GRAPHQL_URL,
-        json={
-            "query": _SEARCH_QUERY,
-            "variables": {
-                "tmdbId": str(tmdb_id),
-                "contentTypes": [_content_type(media_type)],
-            },
-        },
+        headers=_HEADERS,
+        json={"query": _NODE_QUERY, "variables": {"nodeId": node_id}},
         timeout=30,
     )
     response.raise_for_status()
@@ -27,11 +36,15 @@ def get_amazon_prices(tmdb_id: int, media_type: str) -> list[PriceOffer]:
     if not isinstance(payload, dict):
         return []
 
-    title = _first_title(payload)
-    if title is None:
+    data = payload.get("data")
+    if not isinstance(data, dict):
         return []
 
-    offers = title.get("offers")
+    node = data.get("node")
+    if not isinstance(node, dict):
+        return []
+
+    offers = node.get("offers")
     if not isinstance(offers, list):
         return []
 
@@ -43,31 +56,9 @@ def get_amazon_prices(tmdb_id: int, media_type: str) -> list[PriceOffer]:
     ]
 
 
-def _content_type(media_type: str) -> str:
-    if media_type == "movie":
-        return "MOVIE"
-    if media_type == "show":
-        return "SHOW"
-    return media_type.upper()
-
-
-def _first_title(payload: dict[Any, Any]) -> dict[Any, Any] | None:
-    title: dict[Any, Any] | None = None
-    data = payload.get("data")
-    if isinstance(data, dict):
-        search_titles = data.get("searchTitles")
-        if isinstance(search_titles, dict):
-            title = _first_edge_node(search_titles)
-    return title
-
-
-def _first_edge_node(search_titles: dict[Any, Any]) -> dict[Any, Any] | None:
-    edges = search_titles.get("edges")
-    if isinstance(edges, list) and edges and isinstance(edges[0], dict):
-        node = edges[0].get("node")
-        if isinstance(node, dict):
-            return node
-    return None
+def _node_id(tmdb_id: int, media_type: str) -> str:
+    prefix = "ts" if media_type == "show" else "tm"
+    return f"{prefix}{tmdb_id}"
 
 
 def _amazon_buy_price(offer: dict[Any, Any]) -> PriceOffer | None:
@@ -83,19 +74,19 @@ def _amazon_buy_price(offer: dict[Any, Any]) -> PriceOffer | None:
         return None
 
     quality = _quality(offer.get("presentationType"))
-    price = offer.get("retailPrice")
+    price = _parse_price(offer.get("retailPrice"))
     currency = offer.get("currency")
-    if quality is None or not isinstance(price, int | float) or not isinstance(currency, str):
+    if quality is None or price is None or not isinstance(currency, str):
         return None
 
-    return {"quality": quality, "price": float(price), "currency": currency}
+    return {"quality": quality, "price": price, "currency": currency}
 
 
 def _quality(presentation_type: object) -> str | None:
     if not isinstance(presentation_type, str):
         return None
-
-    normalized = presentation_type.upper()
+    # GraphQL enums can't start with a digit, so 4K may be returned as "_4K"
+    normalized = presentation_type.upper().lstrip("_")
     if normalized in {"4K", "UHD"}:
         return "UHD"
     if normalized in {"HD", "SD"}:
@@ -103,23 +94,45 @@ def _quality(presentation_type: object) -> str | None:
     return None
 
 
-_SEARCH_QUERY = """
-query SearchTitles($tmdbId: String!, $contentTypes: [ContentType!]) {
-  searchTitles(
-    externalIds: {tmdb: $tmdbId}
-    filter: {contentTypes: $contentTypes}
-    first: 1
-  ) {
-    edges {
-      node {
-        offers {
-          monetizationType
-          presentationType
-          retailPrice
-          currency
-          package {
-            technicalName
-          }
+def _parse_price(raw: object) -> float | None:
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if not isinstance(raw, str):
+        return None
+    # retailPrice is a locale-formatted string e.g. "$9.99", "CA$ 12.99", "£6.99"
+    m = re.search(r"\d+(?:\.\d+)?", raw)
+    if m is None:
+        return None
+    try:
+        return float(m.group())
+    except ValueError:
+        return None
+
+
+# country and platform are required by the JustWatch schema.
+# WEB covers all digital storefronts; US is the target market.
+_NODE_QUERY = """
+query NodeOffers($nodeId: ID!) {
+  node(id: $nodeId) {
+    ... on Movie {
+      offers(country: US, platform: WEB) {
+        monetizationType
+        presentationType
+        retailPrice(language: "en")
+        currency
+        package {
+          technicalName
+        }
+      }
+    }
+    ... on Show {
+      offers(country: US, platform: WEB) {
+        monetizationType
+        presentationType
+        retailPrice(language: "en")
+        currency
+        package {
+          technicalName
         }
       }
     }

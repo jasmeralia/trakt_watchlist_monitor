@@ -20,8 +20,8 @@ class FakeResponse:
 def test_get_amazon_prices_returns_amazon_buy_offers(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _payload(
         [
-            _offer("amazon_prime", "BUY", "UHD", 14.99, "USD"),
-            _offer("amazon", "BUY", "HD", 9.99, "USD"),
+            _offer("amazon", "BUY", "UHD", "$14.99", "USD"),
+            _offer("amazon", "BUY", "HD", "$9.99", "USD"),
         ]
     )
     calls: list[dict[str, Any]] = []
@@ -32,10 +32,20 @@ def test_get_amazon_prices_returns_amazon_buy_offers(monkeypatch: pytest.MonkeyP
         {"quality": "HD", "price": 9.99, "currency": "USD"},
     ]
     assert calls[0]["url"] == "https://apis.justwatch.com/graphql"
-    assert calls[0]["json"]["variables"] == {
-        "tmdbId": "329865",
-        "contentTypes": ["MOVIE"],
-    }
+    assert calls[0]["json"]["variables"] == {"nodeId": "tm329865"}
+
+
+def test_get_amazon_prices_show_uses_ts_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        justwatch.requests,
+        "post",
+        _post_factory(FakeResponse({"data": {"node": {}}}), calls),
+    )
+
+    justwatch.get_amazon_prices(12345, "show")
+
+    assert calls[0]["json"]["variables"] == {"nodeId": "ts12345"}
 
 
 def test_get_amazon_prices_returns_empty_list_when_not_found(
@@ -45,7 +55,7 @@ def test_get_amazon_prices_returns_empty_list_when_not_found(
     monkeypatch.setattr(
         justwatch.requests,
         "post",
-        _post_factory(FakeResponse({"data": {"searchTitles": {"edges": []}}}), calls),
+        _post_factory(FakeResponse({"data": {"node": {}}}), calls),
     )
 
     assert justwatch.get_amazon_prices(329865, "movie") == []
@@ -56,9 +66,9 @@ def test_get_amazon_prices_filters_out_non_amazon_offers(
 ) -> None:
     payload = _payload(
         [
-            _offer("itunes", "BUY", "HD", 7.99, "USD"),
-            _offer("amazon_prime", "RENT", "HD", 3.99, "USD"),
-            _offer("amazon_prime", "BUY", "HD", 9.99, "USD"),
+            _offer("itunes", "BUY", "HD", "$7.99", "USD"),
+            _offer("amazon", "RENT", "HD", "$3.99", "USD"),
+            _offer("amazon", "BUY", "HD", "$9.99", "USD"),
         ]
     )
     calls: list[dict[str, Any]] = []
@@ -67,6 +77,30 @@ def test_get_amazon_prices_filters_out_non_amazon_offers(
     assert justwatch.get_amazon_prices(329865, "movie") == [
         {"quality": "HD", "price": 9.99, "currency": "USD"}
     ]
+
+
+def test_get_amazon_prices_parses_string_price(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = _payload([_offer("amazon", "BUY", "HD", "$12.99", "USD")])
+    monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
+
+    result = justwatch.get_amazon_prices(1, "movie")
+    assert result == [{"quality": "HD", "price": 12.99, "currency": "USD"}]
+
+
+def test_get_amazon_prices_parses_numeric_price(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = _payload([_offer("amazon", "BUY", "HD", 9.99, "USD")])
+    monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
+
+    result = justwatch.get_amazon_prices(1, "movie")
+    assert result == [{"quality": "HD", "price": 9.99, "currency": "USD"}]
+
+
+def test_get_amazon_prices_maps_4k_to_uhd(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = _payload([_offer("amazon", "BUY", "_4K", "$19.99", "USD")])
+    monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
+
+    result = justwatch.get_amazon_prices(1, "movie")
+    assert result == [{"quality": "UHD", "price": 19.99, "currency": "USD"}]
 
 
 def _post_factory(
@@ -80,14 +114,14 @@ def _post_factory(
 
 
 def _payload(offers: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"data": {"searchTitles": {"edges": [{"node": {"offers": offers}}]}}}
+    return {"data": {"node": {"offers": offers}}}
 
 
 def _offer(
     technical_name: str,
     monetization_type: str,
     presentation_type: str,
-    retail_price: float,
+    retail_price: float | str,
     currency: str,
 ) -> dict[str, Any]:
     return {
