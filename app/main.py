@@ -1,6 +1,7 @@
 import time
+
+from config import settings
 from pricing import check_prices
-from settings import settings
 
 
 def main() -> None:
