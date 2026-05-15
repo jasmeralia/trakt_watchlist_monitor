@@ -1,4 +1,17 @@
+from unittest.mock import Mock
+
+import pytest
+
+import pricing
 from pricing import meets_discount_threshold, select_best_quality
+
+
+class FakeConnection:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class TestSelectBestQuality:
@@ -43,3 +56,89 @@ class TestMeetsDiscountThreshold:
 
     def test_no_discount(self) -> None:
         assert meets_discount_threshold(10.00, 10.00, 20.0) is False
+
+
+class TestCheckPrices:
+    def test_sends_alert_when_threshold_is_met(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        conn = FakeConnection()
+        send_alert = Mock()
+        log_notification = Mock()
+        upsert_price = Mock()
+
+        monkeypatch.setattr(pricing.settings, "db_path", ":memory:")
+        monkeypatch.setattr(pricing.settings, "discount_threshold_percent", 20.0)
+        monkeypatch.setattr(pricing.db, "init_db", Mock(return_value=conn))
+        monkeypatch.setattr(
+            pricing.trakt,
+            "get_effective_watchlist",
+            Mock(
+                return_value=[
+                    {
+                        "trakt_id": 123,
+                        "media_type": "movie",
+                        "title": "Example Movie",
+                        "tmdb_id": 456,
+                    }
+                ]
+            ),
+        )
+        monkeypatch.setattr(
+            pricing.justwatch,
+            "get_amazon_prices",
+            Mock(return_value=[{"quality": "HD", "price": 7.99, "currency": "USD"}]),
+        )
+        monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
+        monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
+        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.db, "log_notification", log_notification)
+        monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
+
+        pricing.check_prices()
+
+        send_alert.assert_called_once()
+        log_notification.assert_called_once_with(conn, 123, "movie", "HD", 7.99, 12.99)
+        upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 7.99, "USD")
+        assert conn.closed is True
+
+    def test_does_not_send_alert_when_below_threshold(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        conn = FakeConnection()
+        send_alert = Mock()
+        log_notification = Mock()
+        upsert_price = Mock()
+
+        monkeypatch.setattr(pricing.settings, "db_path", ":memory:")
+        monkeypatch.setattr(pricing.settings, "discount_threshold_percent", 20.0)
+        monkeypatch.setattr(pricing.db, "init_db", Mock(return_value=conn))
+        monkeypatch.setattr(
+            pricing.trakt,
+            "get_effective_watchlist",
+            Mock(
+                return_value=[
+                    {
+                        "trakt_id": 123,
+                        "media_type": "movie",
+                        "title": "Example Movie",
+                        "tmdb_id": 456,
+                    }
+                ]
+            ),
+        )
+        monkeypatch.setattr(
+            pricing.justwatch,
+            "get_amazon_prices",
+            Mock(return_value=[{"quality": "HD", "price": 11.99, "currency": "USD"}]),
+        )
+        monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
+        monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
+        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.db, "log_notification", log_notification)
+        monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
+
+        pricing.check_prices()
+
+        send_alert.assert_not_called()
+        log_notification.assert_not_called()
+        upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 11.99, "USD")
+        assert conn.closed is True

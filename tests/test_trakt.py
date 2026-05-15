@@ -1,0 +1,115 @@
+from collections.abc import Callable
+from typing import Any
+
+import pytest
+
+import trakt
+from config import settings
+
+
+class FakeResponse:
+    def __init__(self, payload: object, status_code: int = 200) -> None:
+        self.payload = payload
+        self.status_code = status_code
+
+    def json(self) -> object:
+        return self.payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+
+class FakeSession:
+    def __init__(self, responses: list[FakeResponse]) -> None:
+        self.responses = responses
+        self.requests: list[dict[str, Any]] = []
+
+    def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:  # noqa: ANN401
+        self.requests.append({"method": method, "url": url, **kwargs})
+        return self.responses.pop(0)
+
+
+def test_get_watchlist_fetches_raw_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = [
+        {
+            "type": "movie",
+            "movie": {"title": "Arrival", "ids": {"trakt": 1, "tmdb": 329865}},
+        }
+    ]
+    session = FakeSession([FakeResponse(payload)])
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+
+    assert trakt.get_watchlist() == payload
+    assert session.requests[0]["method"] == "GET"
+    assert session.requests[0]["url"] == "https://api.trakt.tv/users/username/watchlist"
+    assert session.requests[0]["headers"] == {
+        "Content-Type": "application/json",
+        "trakt-api-version": "2",
+        "trakt-api-key": "client-id",
+        "Authorization": "Bearer access-token",
+    }
+
+
+def test_get_effective_watchlist_filters_collection(monkeypatch: pytest.MonkeyPatch) -> None:
+    watchlist = [
+        {
+            "type": "movie",
+            "movie": {"title": "Arrival", "ids": {"trakt": 1, "tmdb": 329865}},
+        },
+        {
+            "type": "show",
+            "show": {"title": "Severance", "ids": {"trakt": 2, "tmdb": 95396}},
+        },
+    ]
+    collection_movies = [{"movie": {"title": "Arrival", "ids": {"trakt": 1, "tmdb": 329865}}}]
+    session = FakeSession(
+        [
+            FakeResponse(collection_movies),
+            FakeResponse([]),
+            FakeResponse(watchlist),
+        ]
+    )
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+
+    assert trakt.get_effective_watchlist() == [
+        {"trakt_id": 2, "media_type": "show", "title": "Severance", "tmdb_id": 95396}
+    ]
+
+
+def test_get_watchlist_refreshes_token_and_retries_unauthorized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old_access_token = settings.trakt_access_token
+    old_refresh_token = settings.trakt_refresh_token
+    session = FakeSession(
+        [
+            FakeResponse({"error": "unauthorized"}, status_code=401),
+            FakeResponse([]),
+        ]
+    )
+    refresh_response = FakeResponse(
+        {"access_token": "new-access-token", "refresh_token": "new-refresh-token"}
+    )
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+    monkeypatch.setattr(trakt.requests, "post", _post_factory(refresh_response))
+
+    try:
+        assert trakt.get_watchlist() == []
+        assert settings.trakt_access_token == "new-access-token"
+        assert settings.trakt_refresh_token == "new-refresh-token"
+        assert session.requests[1]["headers"]["Authorization"] == "Bearer new-access-token"
+    finally:
+        settings.trakt_access_token = old_access_token
+        settings.trakt_refresh_token = old_refresh_token
+
+
+def _session_factory(session: FakeSession) -> Callable[[], FakeSession]:
+    return lambda: session
+
+
+def _post_factory(response: FakeResponse) -> Callable[..., FakeResponse]:
+    def post(*_args: Any, **_kwargs: Any) -> FakeResponse:  # noqa: ANN401
+        return response
+
+    return post
