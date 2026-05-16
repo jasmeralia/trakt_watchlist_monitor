@@ -37,6 +37,8 @@ schema, and the discount threshold formula.
 - All changes to `master` go through a pull request; direct pushes are not allowed
 - PRs are squash-merged only
 - The repository owner is `@jasmeralia` (see `.github/CODEOWNERS`)
+- After merging a PR, immediately run `git checkout master && git pull` to bring the
+  local working copy up to date before doing any further work.
 - After merging a PR, check that the GitHub Actions run on `master` succeeds before
   reporting the task complete. Use `gh run list --branch master --limit 1` to get the
   run ID, then `gh run watch <id>` to wait for it, confirming the release workflow
