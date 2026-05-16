@@ -9,9 +9,12 @@ from config import settings
 
 
 class FakeResponse:
-    def __init__(self, payload: object, status_code: int = 200) -> None:
+    def __init__(
+        self, payload: object, status_code: int = 200, headers: dict[str, str] | None = None
+    ) -> None:
         self.payload = payload
         self.status_code = status_code
+        self.headers = headers or {}
 
     def json(self) -> object:
         return self.payload
@@ -54,12 +57,41 @@ def test_get_watchlist_fetches_raw_entries(monkeypatch: pytest.MonkeyPatch) -> N
     assert trakt.get_watchlist() == payload
     assert session.requests[0]["method"] == "GET"
     assert session.requests[0]["url"] == "https://api.trakt.tv/users/username/watchlist"
+    assert session.requests[0]["params"] == {"page": 1, "limit": 100}
     assert session.requests[0]["headers"] == {
         "Content-Type": "application/json",
         "trakt-api-version": "2",
         "trakt-api-key": "client-id",
         "Authorization": "Bearer access-token",
     }
+
+
+def test_get_watchlist_fetches_all_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    first_page = [
+        {
+            "type": "movie",
+            "movie": {"title": "Arrival", "ids": {"trakt": 1, "tmdb": 329865}},
+        }
+    ]
+    second_page = [
+        {
+            "type": "movie",
+            "movie": {"title": "Dune", "ids": {"trakt": 2, "tmdb": 438631}},
+        }
+    ]
+    session = FakeSession(
+        [
+            FakeResponse(first_page, headers={"X-Pagination-Page-Count": "2"}),
+            FakeResponse(second_page, headers={"X-Pagination-Page-Count": "2"}),
+        ]
+    )
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+
+    assert trakt.get_watchlist() == [*first_page, *second_page]
+    assert [request["params"] for request in session.requests] == [
+        {"page": 1, "limit": 100},
+        {"page": 2, "limit": 100},
+    ]
 
 
 def test_get_effective_watchlist_filters_collection(monkeypatch: pytest.MonkeyPatch) -> None:
