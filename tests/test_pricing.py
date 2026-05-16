@@ -481,7 +481,9 @@ class TestCheckPrices:
         log_notification = Mock()
         upsert_price = Mock()
 
-        def get_amazon_prices(tmdb_id: int, media_type: str) -> list[dict[str, object]]:
+        def get_amazon_prices(
+            tmdb_id: int, _media_type: str, _title: str
+        ) -> list[dict[str, object]]:
             if tmdb_id == 456:
                 raise ValueError("bad justwatch response")
             return [{"quality": "HD", "price": 7.99, "currency": "USD"}]

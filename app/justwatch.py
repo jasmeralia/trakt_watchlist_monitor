@@ -25,13 +25,18 @@ _HEADERS = {
 }
 
 
-def get_amazon_prices(tmdb_id: int, media_type: str) -> list[PriceOffer]:
-    node_id = _node_id(tmdb_id, media_type)
+def get_amazon_prices(tmdb_id: int, media_type: str, title: str) -> list[PriceOffer]:
+    if not title:
+        return []
     rate_limit.wait_between_api_requests()
     response = requests.post(
         GRAPHQL_URL,
         headers=_HEADERS,
-        json={"query": _NODE_QUERY, "variables": {"nodeId": node_id}},
+        json={
+            "operationName": "GetPopularTitles",
+            "query": _POPULAR_TITLES_QUERY,
+            "variables": _popular_titles_variables(media_type, title),
+        },
         timeout=30,
     )
     response.raise_for_status()
@@ -46,17 +51,7 @@ def get_amazon_prices(tmdb_id: int, media_type: str) -> list[PriceOffer]:
         )
         return []
 
-    data = payload.get("data")
-    if not isinstance(data, dict):
-        return []
-
-    node = data.get("node")
-    if not isinstance(node, dict):
-        return []
-
-    offers = node.get("offers")
-    if not isinstance(offers, list):
-        return []
+    offers = _offers_for_matching_title(payload, tmdb_id)
 
     return [
         price
@@ -66,9 +61,61 @@ def get_amazon_prices(tmdb_id: int, media_type: str) -> list[PriceOffer]:
     ]
 
 
-def _node_id(tmdb_id: int, media_type: str) -> str:
-    prefix = "ts" if media_type == "show" else "tm"
-    return f"{prefix}{tmdb_id}"
+def _popular_titles_variables(media_type: str, title: str) -> dict[str, object]:
+    return {
+        "country": "US",
+        "first": 10,
+        "language": "en",
+        "platform": "WEB",
+        "popularTitlesFilter": {
+            "objectTypes": [_object_type(media_type)],
+            "searchQuery": title,
+        },
+    }
+
+
+def _object_type(media_type: str) -> str:
+    if media_type == "show":
+        return "SHOW"
+    return "MOVIE"
+
+
+def _offers_for_matching_title(payload: dict[Any, Any], tmdb_id: int) -> list[dict[str, Any]]:
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return []
+
+    popular_titles = data.get("popularTitles")
+    if not isinstance(popular_titles, dict):
+        return []
+
+    edges = popular_titles.get("edges")
+    if not isinstance(edges, list):
+        return []
+
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        node = edge.get("node")
+        if isinstance(node, dict) and _node_tmdb_id(node) == tmdb_id:
+            offers = node.get("offers")
+            if isinstance(offers, list):
+                return [offer for offer in offers if isinstance(offer, dict)]
+    return []
+
+
+def _node_tmdb_id(node: dict[Any, Any]) -> int | None:
+    content = node.get("content")
+    if not isinstance(content, dict):
+        return None
+    external_ids = content.get("externalIds")
+    if not isinstance(external_ids, dict):
+        return None
+    raw_tmdb_id = external_ids.get("tmdbId")
+    try:
+        return int(str(raw_tmdb_id))
+    except (TypeError, ValueError):
+        return None
 
 
 def _amazon_buy_price(offer: dict[Any, Any]) -> PriceOffer | None:
@@ -84,7 +131,9 @@ def _amazon_buy_price(offer: dict[Any, Any]) -> PriceOffer | None:
         return None
 
     quality = _quality(offer.get("presentationType"))
-    price = _parse_price(offer.get("retailPrice"))
+    price = _parse_price(offer.get("retailPriceValue"))
+    if price is None:
+        price = _parse_price(offer.get("retailPrice"))
     currency = offer.get("currency")
     if quality is None or price is None or not isinstance(currency, str):
         return None
@@ -136,30 +185,38 @@ def _graphql_error_message(errors: object) -> str:
     return "unknown error"
 
 
-# country and platform are required by the JustWatch schema.
-# WEB covers all digital storefronts; US is the target market.
-_NODE_QUERY = """
-query NodeOffers($nodeId: ID!) {
-  node(id: $nodeId) {
-    ... on Movie {
-      offers(country: US, platform: WEB) {
-        monetizationType
-        presentationType
-        retailPrice(language: "en")
-        currency
-        package {
-          technicalName
+# Search results expose TMDB external IDs and offer details in the same response. The older
+# node(id: "tm<tmdb_id>") path resolves many titles but returns empty offer lists.
+_POPULAR_TITLES_QUERY = """
+query GetPopularTitles(
+  $country: Country!
+  $first: Int!
+  $language: Language!
+  $platform: Platform!
+  $popularTitlesFilter: TitleFilter
+) {
+  popularTitles(
+    country: $country
+    filter: $popularTitlesFilter
+    first: $first
+    sortBy: POPULAR
+  ) {
+    edges {
+      node {
+        content(country: $country, language: $language) {
+          externalIds {
+            tmdbId
+          }
         }
-      }
-    }
-    ... on Show {
-      offers(country: US, platform: WEB) {
-        monetizationType
-        presentationType
-        retailPrice(language: "en")
-        currency
-        package {
-          technicalName
+        offers(country: $country, platform: $platform) {
+          monetizationType
+          presentationType
+          retailPrice(language: $language)
+          retailPriceValue
+          currency
+          package {
+            technicalName
+          }
         }
       }
     }
