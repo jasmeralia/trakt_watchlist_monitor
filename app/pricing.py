@@ -135,7 +135,7 @@ def _process_watchlist_item(
         item.get("title", ""),
     )
 
-    prices = justwatch.get_amazon_prices(tmdb_id, media_type)
+    prices = justwatch.get_amazon_prices(tmdb_id, media_type, str(item.get("title", "")))
     logger.debug(
         "Prices seen for trakt_id=%d media_type=%s tmdb_id=%d: offer_count=%d offers=%s",
         trakt_id,
