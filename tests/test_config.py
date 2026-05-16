@@ -8,10 +8,12 @@ def test_log_level_defaults_to_info() -> None:
     assert _settings().log_level == "INFO"
 
 
-def test_api_request_interval_defaults_to_two_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_api_request_interval_defaults_to_one_and_a_half_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("API_REQUEST_INTERVAL_SECONDS", raising=False)
 
-    assert _settings().api_request_interval_seconds == 2.0
+    assert _settings().api_request_interval_seconds == 1.5
 
 
 def test_api_request_interval_accepts_zero_to_disable_sleep() -> None:

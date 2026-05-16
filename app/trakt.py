@@ -8,6 +8,7 @@ import rate_limit
 from config import settings
 
 BASE_URL = "https://api.trakt.tv"
+PAGE_LIMIT = 100
 
 
 def refresh_token() -> None:
@@ -63,21 +64,43 @@ def get_effective_watchlist() -> list[dict[str, Any]]:
 
 
 def _get(path: str) -> list[dict[str, Any]]:
-    response = _request_with_refresh("GET", path)
-    data = response.json()
-    if not isinstance(data, list):
-        msg = f"Expected list response from Trakt path {path}"
-        raise TypeError(msg)
-    return [item for item in data if isinstance(item, dict)]
+    items: list[dict[str, Any]] = []
+    page = 1
+    page_count = 1
+    while page <= page_count:
+        response = _request_with_refresh(
+            "GET",
+            path,
+            params={"page": page, "limit": PAGE_LIMIT},
+        )
+        data = response.json()
+        if not isinstance(data, list):
+            msg = f"Expected list response from Trakt path {path}"
+            raise TypeError(msg)
+        items.extend(item for item in data if isinstance(item, dict))
+        page_count = _pagination_page_count(response)
+        page += 1
+    return items
 
 
-def _request_with_refresh(method: str, path: str) -> requests.Response:
+def _pagination_page_count(response: requests.Response) -> int:
+    raw_page_count = response.headers.get("X-Pagination-Page-Count", "1")
+    try:
+        return max(int(raw_page_count), 1)
+    except ValueError:
+        return 1
+
+
+def _request_with_refresh(
+    method: str, path: str, params: dict[str, int] | None = None
+) -> requests.Response:
     session = requests.Session()
     rate_limit.wait_between_api_requests()
     response = session.request(
         method,
         f"{BASE_URL}{path}",
         headers=_headers(),
+        params=params,
         timeout=30,
     )
     if response.status_code != 401:
@@ -90,6 +113,7 @@ def _request_with_refresh(method: str, path: str) -> requests.Response:
         method,
         f"{BASE_URL}{path}",
         headers=_headers(),
+        params=params,
         timeout=30,
     )
     response.raise_for_status()

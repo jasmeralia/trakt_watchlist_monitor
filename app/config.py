@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     discount_threshold_percent: float = Field(default=20.0, gt=0, le=100)
     check_interval_hours: float = Field(default=24.0, gt=0)
-    api_request_interval_seconds: float = Field(default=2.0, ge=0)
+    api_request_interval_seconds: float = Field(default=1.5, ge=0)
     db_path: str = "/data/prices.db"
     log_level: LogLevel = "INFO"
 
