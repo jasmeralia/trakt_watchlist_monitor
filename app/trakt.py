@@ -1,3 +1,4 @@
+import sys
 from typing import Any
 
 import requests
@@ -89,10 +90,14 @@ def _headers() -> dict[str, str]:
 
 def _normalize_watchlist_item(item: dict[str, Any]) -> dict[str, Any] | None:
     media_type = item.get("type")
-    if media_type not in {"movie", "show"}:
+    if media_type == "movie":
+        media = item.get("movie")
+    elif media_type == "show":
+        media = item.get("show")
+    else:
+        print(f"Unsupported Trakt watchlist item type: {media_type}", file=sys.stderr)
         return None
 
-    media = item.get(media_type)
     if not isinstance(media, dict):
         return None
 

@@ -87,6 +87,23 @@ def test_get_effective_watchlist_filters_collection(monkeypatch: pytest.MonkeyPa
     ]
 
 
+def test_get_effective_watchlist_logs_unsupported_type(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    watchlist = [{"type": "season", "season": {"ids": {"trakt": 3}}}]
+    session = FakeSession(
+        [
+            FakeResponse([]),
+            FakeResponse([]),
+            FakeResponse(watchlist),
+        ]
+    )
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+
+    assert trakt.get_effective_watchlist() == []
+    assert "Unsupported Trakt watchlist item type: season" in capsys.readouterr().err
+
+
 def test_get_watchlist_refreshes_token_and_retries_unauthorized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

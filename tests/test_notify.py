@@ -39,7 +39,7 @@ def test_send_alert_sends_plain_text_email(notify_module: object) -> None:
     with patch.object(notify_module.smtplib, "SMTP", return_value=smtp_context) as smtp_class:
         notify_module.send_alert("Price drop", "The price dropped to $7.99.")
 
-    smtp_class.assert_called_once_with("smtp.example.com", 587)
+    smtp_class.assert_called_once_with("smtp.example.com", 587, timeout=30)
     smtp.starttls.assert_called_once_with()
     smtp.login.assert_called_once_with("smtp-user", "smtp-password")
     smtp.send_message.assert_called_once()

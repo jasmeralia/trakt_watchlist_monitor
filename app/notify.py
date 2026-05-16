@@ -11,7 +11,7 @@ def send_alert(title: str, body: str) -> None:
     message["Subject"] = title
     message.set_content(body)
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as smtp:
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as smtp:
         smtp.starttls()
         smtp.login(settings.smtp_username, settings.smtp_password)
         smtp.send_message(message)

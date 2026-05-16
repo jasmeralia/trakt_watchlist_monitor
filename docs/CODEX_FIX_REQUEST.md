@@ -31,12 +31,12 @@ currency key, SMTP_SSL, season support) are explicitly out of scope here.
   comma followed by exactly two digits at end of string) with a period, then remove
   remaining commas, and parse the result. Add tests for both formats.
 
-- [ ] **zero-division-guard** `app/pricing.py`: Guard against `last_price == 0.0` in the
+- [x] **zero-division-guard** `app/pricing.py`: Guard against `last_price == 0.0` in the
   discount-percentage calculation inside `check_prices()`. If `last_price` is zero, skip
   the notification logic (a zero baseline is not a meaningful reference price) and still
   call `upsert_price`.
 
-- [ ] **upsert-after-alert** `app/pricing.py` + `tests/test_pricing.py`: The critical bug:
+- [x] **upsert-after-alert** `app/pricing.py` + `tests/test_pricing.py`: The critical bug:
   when the threshold is met and alert sending fails, `upsert_price` still runs, permanently
   preventing future re-alerts. Fix: only call `upsert_price` when the alert was either
   (a) sent successfully, or (b) not required (below threshold, first observation, price
@@ -44,7 +44,7 @@ currency key, SMTP_SSL, season support) are explicitly out of scope here.
   next run retries. Update the notify-failure test to assert that `upsert_price` is NOT
   called when send fails.
 
-- [ ] **season-log** `app/trakt.py`: In `_normalize_watchlist_item()`, add an explicit
+- [x] **season-log** `app/trakt.py`: In `_normalize_watchlist_item()`, add an explicit
   `elif item["type"] not in {"movie", "show"}` branch that logs the unsupported type to
   stderr and returns `None`, rather than falling through silently.
 
@@ -73,3 +73,7 @@ currency key, SMTP_SSL, season support) are explicitly out of scope here.
   loop failures with traceback details, then waits the configured interval before retrying.
 - Completed `smtp-timeout` on 2026-05-15: SMTP alert delivery now uses a 30-second
   connection timeout.
+- Completed `zero-division-guard` on 2026-05-15: zero last-price baselines now bypass
+  discount notification checks while still recording the observed price.
+- Completed `season-log` on 2026-05-15: unsupported Trakt watchlist item types now log to
+  stderr before being ignored.

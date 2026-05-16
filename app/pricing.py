@@ -53,7 +53,7 @@ def check_prices() -> None:
                     db.upsert_price(conn, trakt_id, media_type, quality, current_price, currency)
                     continue
 
-                if current_price < last_price:
+                if last_price != 0.0 and current_price < last_price:
                     drop_percent = (last_price - current_price) / last_price * 100
                     if meets_discount_threshold(
                         last_price, current_price, settings.discount_threshold_percent
@@ -71,6 +71,7 @@ def check_prices() -> None:
                                 f"Failed to send price alert for {trakt_id}: {exc}",
                                 file=sys.stderr,
                             )
+                            continue
                         else:
                             db.log_notification(
                                 conn, trakt_id, media_type, quality, current_price, last_price

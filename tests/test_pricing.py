@@ -335,6 +335,51 @@ class TestCheckPrices:
         upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 14.99, "USD")
         assert conn.closed is True
 
+    def test_zero_last_price_stores_price_without_alert(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        conn = FakeConnection()
+        send_alert = Mock()
+        log_notification = Mock()
+        was_notified = Mock(return_value=False)
+        upsert_price = Mock()
+
+        monkeypatch.setattr(pricing.settings, "db_path", ":memory:")
+        monkeypatch.setattr(pricing.settings, "discount_threshold_percent", 20.0)
+        monkeypatch.setattr(pricing.db, "init_db", Mock(return_value=conn))
+        monkeypatch.setattr(
+            pricing.trakt,
+            "get_effective_watchlist",
+            Mock(
+                return_value=[
+                    {
+                        "trakt_id": 123,
+                        "media_type": "movie",
+                        "title": "Example Movie",
+                        "tmdb_id": 456,
+                    }
+                ]
+            ),
+        )
+        monkeypatch.setattr(
+            pricing.justwatch,
+            "get_amazon_prices",
+            Mock(return_value=[{"quality": "HD", "price": 7.99, "currency": "USD"}]),
+        )
+        monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=0.0))
+        monkeypatch.setattr(pricing.db, "was_notified", was_notified)
+        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.db, "log_notification", log_notification)
+        monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
+
+        pricing.check_prices()
+
+        send_alert.assert_not_called()
+        log_notification.assert_not_called()
+        was_notified.assert_not_called()
+        upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 7.99, "USD")
+        assert conn.closed is True
+
     def test_notification_failure_does_not_skip_price_upsert(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -375,7 +420,7 @@ class TestCheckPrices:
 
         send_alert.assert_called_once()
         log_notification.assert_not_called()
-        upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 7.99, "USD")
+        upsert_price.assert_not_called()
         assert "Failed to send price alert for 123: smtp failed" in capsys.readouterr().err
         assert conn.closed is True
 
