@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -128,6 +129,38 @@ def test_get_watchlist_refreshes_token_and_retries_unauthorized(
         assert settings.trakt_access_token == "new-access-token"
         assert settings.trakt_refresh_token == "new-refresh-token"
         assert session.requests[1]["headers"]["Authorization"] == "Bearer new-access-token"
+    finally:
+        settings.trakt_access_token = old_access_token
+        settings.trakt_refresh_token = old_refresh_token
+
+
+def test_get_watchlist_refresh_persists_tokens(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    old_access_token = settings.trakt_access_token
+    old_refresh_token = settings.trakt_refresh_token
+    session = FakeSession(
+        [
+            FakeResponse({"error": "unauthorized"}, status_code=401),
+            FakeResponse([]),
+        ]
+    )
+    refresh_response = FakeResponse(
+        {
+            "access_token": "persisted-access-token",
+            "refresh_token": "persisted-refresh-token",
+        }
+    )
+    monkeypatch.setattr(settings, "db_path", str(tmp_path / "prices.db"))
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+    monkeypatch.setattr(trakt.requests, "post", _post_factory(refresh_response))
+
+    try:
+        assert trakt.get_watchlist() == []
+        assert (tmp_path / "tokens.env").read_text(encoding="utf-8") == (
+            "TRAKT_ACCESS_TOKEN=persisted-access-token\n"
+            "TRAKT_REFRESH_TOKEN=persisted-refresh-token\n"
+        )
     finally:
         settings.trakt_access_token = old_access_token
         settings.trakt_refresh_token = old_refresh_token

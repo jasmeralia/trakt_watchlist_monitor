@@ -50,3 +50,31 @@ def test_send_alert_sends_plain_text_email(notify_module: object) -> None:
     assert message["To"] == "recipient@example.com"
     assert message.get_content_type() == "text/plain"
     assert message.get_content() == "The price dropped to $7.99.\n"
+
+
+def test_send_alert_uses_smtp_ssl_for_port_465(notify_module: object) -> None:
+    notify_module.settings = SimpleNamespace(
+        smtp_host="smtp.example.com",
+        smtp_port=465,
+        smtp_username="smtp-user",
+        smtp_password="smtp-password",
+        smtp_from="sender@example.com",
+        smtp_to="recipient@example.com",
+    )
+    smtp = MagicMock()
+    smtp_context = MagicMock()
+    smtp_context.__enter__.return_value = smtp
+
+    with (
+        patch.object(notify_module.smtplib, "SMTP") as smtp_class,
+        patch.object(
+            notify_module.smtplib, "SMTP_SSL", return_value=smtp_context
+        ) as smtp_ssl_class,
+    ):
+        notify_module.send_alert("Price drop", "The price dropped to $7.99.")
+
+    smtp_class.assert_not_called()
+    smtp_ssl_class.assert_called_once_with("smtp.example.com", 465, timeout=30)
+    smtp.starttls.assert_not_called()
+    smtp.login.assert_called_once_with("smtp-user", "smtp-password")
+    smtp.send_message.assert_called_once()

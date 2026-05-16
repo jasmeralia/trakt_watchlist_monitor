@@ -48,15 +48,39 @@ currency key, SMTP_SSL, season support) are explicitly out of scope here.
   `elif item["type"] not in {"movie", "show"}` branch that logs the unsupported type to
   stderr and returns `None`, rather than falling through silently.
 
-- [ ] **select-cheapest-quality** `app/pricing.py` `select_best_quality()`: When multiple
+- [x] **select-cheapest-quality** `app/pricing.py` `select_best_quality()`: When multiple
   offers share the same quality tier, select the one with the lowest price rather than the
   first encountered. Update or add a test for this case.
 
+- [x] **currency-guard** `app/pricing.py`: After extracting the currency from the best-price
+  offer inside `check_prices()`, check whether it equals `"USD"`. If not, log a warning to
+  stderr (`f"Unexpected currency {currency!r} for trakt_id {trakt_id}; skipping"`) and
+  `continue` to the next item. This prevents a future currency switch from causing a
+  mixed-currency price comparison. The expected currency is `"USD"` (hardcoded constant in
+  pricing.py — no new config field). Add a test asserting that a non-USD offer skips
+  `upsert_price` and logs to stderr.
+
+- [x] **token-persistence** `app/trakt.py` + `app/config.py`: After a successful Trakt token
+  refresh in `refresh_token()`, write the new access and refresh tokens to a file at
+  `os.path.join(os.path.dirname(settings.db_path), "tokens.env")` (e.g. `/data/tokens.env`
+  alongside the DB). Write only two lines: `TRAKT_ACCESS_TOKEN=<value>` and
+  `TRAKT_REFRESH_TOKEN=<value>`. Wrap the write in a non-fatal `try/except OSError` that logs
+  to stderr if it fails. In `app/config.py`, extend `env_file` from `".env"` to the tuple
+  `(".env", "/data/tokens.env")` so that persisted tokens are loaded on the next restart
+  (pydantic-settings silently skips missing files). Do not add any new Settings fields. Add a
+  test to `tests/test_trakt.py` verifying that after a 401 refresh, the token file is written
+  with the new values.
+
+- [x] **smtp-ssl** `app/notify.py`: If `settings.smtp_port == 465`, use
+  `smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=30)` and skip the
+  `starttls()` call. For all other ports keep the existing `smtplib.SMTP(..., timeout=30)`
+  + `starttls()` path. No new config fields. Update or add tests to cover both branches.
+
 ## Constraints
 
-- Do not add new config fields or modify pydantic Settings.
+- Do not add new config fields or modify pydantic Settings (beyond the env_file tuple change
+  in config.py for token-persistence).
 - Do not change the DB schema or add migrations.
-- Do not add SMTP_SSL support (out of scope).
 - Do not implement season lookup via JustWatch (out of scope).
 - All changes must pass `make lint-fix && make lint && make test`.
 - Follow existing project style (typed, ruff-formatted, pylint-clean).
@@ -77,3 +101,11 @@ currency key, SMTP_SSL, season support) are explicitly out of scope here.
   discount notification checks while still recording the observed price.
 - Completed `season-log` on 2026-05-15: unsupported Trakt watchlist item types now log to
   stderr before being ignored.
+- Completed `select-cheapest-quality` on 2026-05-15: same-quality offers now choose the
+  lowest price within the highest available quality tier.
+- Completed `currency-guard` on 2026-05-15: non-USD best-price offers now log a warning and
+  skip price persistence for that item.
+- Completed `smtp-ssl` on 2026-05-15: port 465 now uses implicit TLS via `SMTP_SSL`, while
+  other SMTP ports continue to use STARTTLS.
+- Completed `token-persistence` on 2026-05-16: refreshed Trakt tokens now persist to
+  `tokens.env` beside the SQLite database and are loaded from `/data/tokens.env` on restart.

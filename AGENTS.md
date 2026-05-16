@@ -37,3 +37,6 @@ schema, and the discount threshold formula.
 - All changes to `master` go through a pull request; direct pushes are not allowed
 - PRs are squash-merged only
 - The repository owner is `@jasmeralia` (see `.github/CODEOWNERS`)
+- After merging a PR, monitor the GitHub Actions run on `master` to confirm the release
+  workflow succeeds (tag creation and Docker image push to GHCR). Use `gh pr checks` or
+  `gh run list --branch master` to verify.

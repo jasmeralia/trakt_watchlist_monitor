@@ -17,8 +17,11 @@ def select_best_quality(prices: list[dict[str, Any]]) -> dict[str, Any] | None:
     Priority: UHD > HD > SD
     """
     priority = {"UHD": 3, "HD": 2, "SD": 1}
-    prices = sorted(prices, key=lambda p: priority.get(p["quality"], 0), reverse=True)
-    return prices[0] if prices else None
+    return min(
+        prices,
+        key=lambda p: (-priority.get(p["quality"], 0), float(p["price"])),
+        default=None,
+    )
 
 
 def meets_discount_threshold(original: float, current: float, percent: float) -> bool:
@@ -48,6 +51,12 @@ def check_prices() -> None:
                 quality = str(best_price["quality"])
                 current_price = float(best_price["price"])
                 currency = str(best_price.get("currency", "USD"))
+                if currency != "USD":
+                    print(
+                        f"Unexpected currency {currency!r} for trakt_id {trakt_id}; skipping",
+                        file=sys.stderr,
+                    )
+                    continue
                 last_price = db.get_last_price(conn, trakt_id, media_type, quality)
                 if last_price is None:
                     db.upsert_price(conn, trakt_id, media_type, quality, current_price, currency)

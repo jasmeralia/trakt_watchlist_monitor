@@ -1,3 +1,4 @@
+import os
 import sys
 from typing import Any
 
@@ -25,6 +26,18 @@ def refresh_token() -> None:
     token_data = response.json()
     settings.trakt_access_token = str(token_data["access_token"])
     settings.trakt_refresh_token = str(token_data["refresh_token"])
+    _persist_tokens()
+
+
+def _persist_tokens() -> None:
+    token_dir = os.path.dirname(settings.db_path) or "."
+    token_path = os.path.join(token_dir, "tokens.env")
+    try:
+        with open(token_path, "w", encoding="utf-8") as token_file:
+            token_file.write(f"TRAKT_ACCESS_TOKEN={settings.trakt_access_token}\n")
+            token_file.write(f"TRAKT_REFRESH_TOKEN={settings.trakt_refresh_token}\n")
+    except OSError as exc:
+        print(f"Failed to persist Trakt tokens to {token_path}: {exc}", file=sys.stderr)
 
 
 def get_watchlist() -> list[dict[str, Any]]:

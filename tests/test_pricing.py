@@ -44,6 +44,17 @@ class TestSelectBestQuality:
     def test_empty_list_returns_none(self) -> None:
         assert select_best_quality([]) is None
 
+    def test_prefers_lowest_price_within_same_quality(self) -> None:
+        prices = [
+            {"quality": "HD", "price": 12.99},
+            {"quality": "HD", "price": 7.99},
+            {"quality": "SD", "price": 4.99},
+        ]
+        result = select_best_quality(prices)
+        assert result is not None
+        assert result["quality"] == "HD"
+        assert result["price"] == 7.99
+
 
 class TestMeetsDiscountThreshold:
     def test_above_threshold(self) -> None:
@@ -259,6 +270,44 @@ class TestCheckPrices:
 
         send_alert.assert_not_called()
         upsert_price.assert_not_called()
+        assert conn.closed is True
+
+    def test_skips_item_with_unexpected_currency(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        conn = FakeConnection()
+        get_last_price = Mock()
+        upsert_price = Mock()
+
+        monkeypatch.setattr(pricing.settings, "db_path", ":memory:")
+        monkeypatch.setattr(pricing.db, "init_db", Mock(return_value=conn))
+        monkeypatch.setattr(
+            pricing.trakt,
+            "get_effective_watchlist",
+            Mock(
+                return_value=[
+                    {
+                        "trakt_id": 123,
+                        "media_type": "movie",
+                        "title": "Example Movie",
+                        "tmdb_id": 456,
+                    }
+                ]
+            ),
+        )
+        monkeypatch.setattr(
+            pricing.justwatch,
+            "get_amazon_prices",
+            Mock(return_value=[{"quality": "HD", "price": 7.99, "currency": "EUR"}]),
+        )
+        monkeypatch.setattr(pricing.db, "get_last_price", get_last_price)
+        monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
+
+        pricing.check_prices()
+
+        get_last_price.assert_not_called()
+        upsert_price.assert_not_called()
+        assert "Unexpected currency 'EUR' for trakt_id 123; skipping" in capsys.readouterr().err
         assert conn.closed is True
 
     def test_skips_item_without_tmdb_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
