@@ -58,7 +58,9 @@ See `.env.example` for a template.
 | `SMTP_TO` | str | — | Yes | Recipient email address |
 | `DISCOUNT_THRESHOLD_PERCENT` | float | 20.0 | No | Minimum % price drop to trigger notification |
 | `CHECK_INTERVAL_HOURS` | float | 24.0 | No | Hours between price checks |
+| `API_REQUEST_INTERVAL_SECONDS` | float | 2.0 | No | Minimum delay between external API requests |
 | `DB_PATH` | str | /data/prices.db | No | SQLite database file path |
+| `LOG_LEVEL` | str | INFO | No | Logging verbosity: CRITICAL, ERROR, WARNING, INFO, DEBUG, or NOTSET |
 
 ## SQLite Schema
 

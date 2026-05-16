@@ -96,7 +96,9 @@ $EDITOR .env
 | `SMTP_TO` | Yes | — | Recipient email address |
 | `DISCOUNT_THRESHOLD_PERCENT` | No | `20.0` | Minimum % price drop to trigger a notification |
 | `CHECK_INTERVAL_HOURS` | No | `24.0` | Hours between price checks |
+| `API_REQUEST_INTERVAL_SECONDS` | No | `2.0` | Minimum delay between external API requests |
 | `DB_PATH` | No | `/data/prices.db` | SQLite database path (inside container) |
+| `LOG_LEVEL` | No | `INFO` | Logging verbosity: `CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`, or `NOTSET` |
 
 ## Running with Docker
 

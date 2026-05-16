@@ -4,12 +4,14 @@ from typing import Any
 
 import requests
 
+import rate_limit
 from config import settings
 
 BASE_URL = "https://api.trakt.tv"
 
 
 def refresh_token() -> None:
+    rate_limit.wait_between_api_requests()
     response = requests.post(
         f"{BASE_URL}/oauth/token",
         json={
@@ -71,6 +73,7 @@ def _get(path: str) -> list[dict[str, Any]]:
 
 def _request_with_refresh(method: str, path: str) -> requests.Response:
     session = requests.Session()
+    rate_limit.wait_between_api_requests()
     response = session.request(
         method,
         f"{BASE_URL}{path}",
@@ -82,6 +85,7 @@ def _request_with_refresh(method: str, path: str) -> requests.Response:
         return response
 
     refresh_token()
+    rate_limit.wait_between_api_requests()
     response = session.request(
         method,
         f"{BASE_URL}{path}",

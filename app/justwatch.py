@@ -4,6 +4,8 @@ from typing import Any
 
 import requests
 
+import rate_limit
+
 GRAPHQL_URL = "https://apis.justwatch.com/graphql"
 # "amazon" is the verified technicalName for Amazon buy/rent offers.
 # Amazon-branded channel packages (e.g. amazonscreambox, amazoncineverse) are distinct
@@ -25,6 +27,7 @@ _HEADERS = {
 
 def get_amazon_prices(tmdb_id: int, media_type: str) -> list[PriceOffer]:
     node_id = _node_id(tmdb_id, media_type)
+    rate_limit.wait_between_api_requests()
     response = requests.post(
         GRAPHQL_URL,
         headers=_HEADERS,

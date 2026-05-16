@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, settings.log_level),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     while True:
