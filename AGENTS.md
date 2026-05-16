@@ -1,28 +1,43 @@
-# Agent Instructions
+# Agent Development Rules
 
-This repo checks Trakt watchlists for price changes and sends notifications.
+## Verification (Required on Every Code Change)
 
-## After Any Code Change
+After any code change, run:
 
 ```bash
-make lint-fix && make lint
+make lint-fix && make lint && make test
 ```
 
-Resolve all reported issues before committing.
+All three must pass before the task is considered complete.
+
+## Additional Linting
+
+- **Shell scripts** (`.sh` files): must pass `shellcheck`. Covered by `make lint` automatically.
+- **Dockerfile**: must pass `hadolint`. Covered by `make lint` automatically.
+
+## Configuration
+
+- Never use `os.getenv` directly in application code.
+- All configuration must be accessed via `from config import settings` (see `app/config.py`).
+- Never commit `.env` files. Use `.env.example` as the documentation template.
+
+## Code Style
+
+- Python 3.12+ with strict mypy typing
+- Line length: 100 characters (enforced by ruff and pylint)
+- Formatting: ruff (run `make lint-fix` to auto-apply)
+
+## Architecture Reference
+
+See [docs/DESIGN.md](docs/DESIGN.md) for module responsibilities, SQLite schema, configuration
+schema, and the discount threshold formula.
 
 ## Git Workflow
 
-- Never push commits directly to `master`. Always open a pull request from a feature/fix branch.
-- Use squash merge strategy when merging pull requests.
-- After merging any pull request, monitor the GitHub Actions workflow runs to confirm CI passes.
-
-## Key Files
-
-- `app/main.py` — entry point, polling loop
-- `app/pricing.py` — price check logic
-- `app/settings.py` — pydantic-settings configuration (reads `.env` / `/app/.env`)
-
-## Runtime
-
-- Runs as a Docker container.
-- Configure via environment variables or bind-mounted `/app/.env`.
+- All changes to `master` go through a pull request; direct pushes are not allowed
+- PRs are squash-merged only
+- The repository owner is `@jasmeralia` (see `.github/CODEOWNERS`)
+- After merging a PR, check that the GitHub Actions run on `master` succeeds before
+  reporting the task complete. Use `gh run list --branch master --limit 1` to get the
+  run ID, then `gh run watch <id>` to wait for it, confirming the release workflow
+  (tag creation and Docker image push to GHCR) completes without error.

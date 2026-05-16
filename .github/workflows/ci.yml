@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system linters
+        run: |
+          wget -q -O /usr/local/bin/hadolint \
+            "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64"
+          chmod +x /usr/local/bin/hadolint
+          sudo apt-get install -y shellcheck
+
+      - name: Cache venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt') }}
+          restore-keys: venv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: make venv
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
