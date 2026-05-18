@@ -32,7 +32,7 @@ def test_get_amazon_prices_returns_amazon_buy_offers(monkeypatch: pytest.MonkeyP
         {"quality": "UHD", "price": 14.99, "currency": "USD"},
         {"quality": "HD", "price": 9.99, "currency": "USD"},
     ]
-    assert image_url == "https://images.justwatch.com/poster/abc123/s166"
+    assert image_url == "https://images.justwatch.com/poster/abc123/s166/movie-title.jpg"
     assert jw_url == "https://www.justwatch.com/us/movie/arrival"
     assert calls[0]["url"] == "https://apis.justwatch.com/graphql"
     assert calls[0]["json"]["operationName"] == "GetPopularTitles"
@@ -175,7 +175,7 @@ def test_get_amazon_prices_returns_poster_url_and_jw_url(monkeypatch: pytest.Mon
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
     _, image_url, jw_url = justwatch.get_amazon_prices(329865, "movie", "Arrival")
-    assert image_url == "https://images.justwatch.com/poster/abc123/s166"
+    assert image_url == "https://images.justwatch.com/poster/abc123/s166/movie-title.jpg"
     assert jw_url == "https://www.justwatch.com/us/movie/arrival"
 
 
@@ -203,7 +203,7 @@ def _post_factory(
 def _payload(
     offers: list[dict[str, Any]],
     tmdb_id: int = 329865,
-    poster_url: str | None = "https://images.justwatch.com/poster/abc123/s{profile}",
+    poster_url: str | None = "/poster/abc123/{profile}/movie-title.{format}",
     full_path: str | None = "/us/movie/arrival",
 ) -> dict[str, Any]:
     return {

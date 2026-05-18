@@ -131,7 +131,7 @@ def _node_content_metadata(node: dict[Any, Any]) -> tuple[str | None, str | None
 def _build_poster_url(poster_url: object) -> str | None:
     if not isinstance(poster_url, str) or not poster_url:
         return None
-    url = poster_url.replace("{profile}", "166")
+    url = poster_url.replace("{profile}", "s166").replace("{format}", "jpg")
     if url.startswith("/"):
         url = "https://images.justwatch.com" + url
     return url
