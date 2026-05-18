@@ -71,6 +71,26 @@ def test_was_notified_returns_true_for_price_below_logged_price() -> None:
         conn.close()
 
 
+def test_was_notified_returns_false_when_price_increased_since_notification() -> None:
+    conn = init_db(":memory:")
+    try:
+        log_notification(conn, 1, "movie", "HD", 4.99, 0.0)
+        # Price went up to 5.99 since the notification — sale state is reset
+        assert was_notified(conn, 1, "movie", "HD", 4.99, last_price=5.99) is False
+    finally:
+        conn.close()
+
+
+def test_was_notified_returns_true_when_no_price_increase_since_notification() -> None:
+    conn = init_db(":memory:")
+    try:
+        log_notification(conn, 1, "movie", "HD", 4.99, 0.0)
+        # last_price matches the notified price — no increase occurred
+        assert was_notified(conn, 1, "movie", "HD", 4.99, last_price=4.99) is True
+    finally:
+        conn.close()
+
+
 def test_init_db_returns_open_connection() -> None:
     conn = init_db(":memory:")
     try:

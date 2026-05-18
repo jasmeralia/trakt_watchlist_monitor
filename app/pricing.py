@@ -169,18 +169,41 @@ def _process_watchlist_item(  # pylint: disable=too-many-locals
         quality,
         last_price,
     )
+
+    slug = item.get("trakt_slug")
+    trakt_url = (
+        f"https://trakt.tv/{media_type}s/{slug}" if isinstance(slug, str) and slug else None
+    )
+
     if last_price is None:
         stats["first_observations"] += 1
+        if current_price < settings.sale_price_threshold:
+            logger.debug(
+                "First observation below sale threshold for trakt_id=%d: price=%.2f",
+                trakt_id,
+                current_price,
+            )
+            price_drop = PriceDrop(
+                item=item,
+                trakt_id=trakt_id,
+                media_type=media_type,
+                quality=quality,
+                current_price=current_price,
+                currency=currency,
+                last_price=0.0,
+                image_url=image_url,
+                trakt_url=trakt_url,
+                jw_url=jw_url,
+            )
+            if _qualify_price_drop(conn, price_drop):
+                qualified_drops.append(price_drop)
+                return
         stats["prices_recorded"] += 1
         logger.debug("Recording first observed price for trakt_id=%d", trakt_id)
         db.upsert_price(conn, trakt_id, media_type, quality, current_price, currency)
         return
 
     if last_price != 0.0 and current_price < last_price:
-        slug = item.get("trakt_slug")
-        trakt_url = (
-            f"https://trakt.tv/{media_type}s/{slug}" if isinstance(slug, str) and slug else None
-        )
         price_drop = PriceDrop(
             item=item,
             trakt_id=trakt_id,
@@ -212,31 +235,43 @@ def _qualify_price_drop(
     conn: sqlite3.Connection,
     price_drop: PriceDrop,
 ) -> bool:
-    drop_percent = (price_drop.last_price - price_drop.current_price) / price_drop.last_price * 100
-    logger.debug(
-        "Price drop seen for trakt_id=%d: last_price=%.2f current_price=%.2f drop_percent=%.1f",
-        price_drop.trakt_id,
-        price_drop.last_price,
-        price_drop.current_price,
-        drop_percent,
-    )
-    if not meets_discount_threshold(
-        price_drop.last_price,
-        price_drop.current_price,
-        settings.discount_threshold_percent,
-    ):
+    if price_drop.current_price < settings.sale_price_threshold:
         logger.debug(
-            "Price drop below threshold for trakt_id=%d: threshold_percent=%.1f",
+            "Price below sale threshold for trakt_id=%d: current_price=%.2f threshold=%.2f",
             price_drop.trakt_id,
-            settings.discount_threshold_percent,
+            price_drop.current_price,
+            settings.sale_price_threshold,
         )
-        return False
+    else:
+        drop_percent = (
+            (price_drop.last_price - price_drop.current_price) / price_drop.last_price * 100
+        )
+        logger.debug(
+            "Price drop seen for trakt_id=%d: last_price=%.2f current_price=%.2f drop_percent=%.1f",
+            price_drop.trakt_id,
+            price_drop.last_price,
+            price_drop.current_price,
+            drop_percent,
+        )
+        if not meets_discount_threshold(
+            price_drop.last_price,
+            price_drop.current_price,
+            settings.discount_threshold_percent,
+        ):
+            logger.debug(
+                "Price drop below threshold for trakt_id=%d: threshold_percent=%.1f",
+                price_drop.trakt_id,
+                settings.discount_threshold_percent,
+            )
+            return False
+    last_price_for_reset = price_drop.last_price if price_drop.last_price != 0.0 else None
     if db.was_notified(
         conn,
         price_drop.trakt_id,
         price_drop.media_type,
         price_drop.quality,
         price_drop.current_price,
+        last_price_for_reset,
     ):
         logger.debug(
             "Skipping duplicate alert for trakt_id=%d price=%.2f",

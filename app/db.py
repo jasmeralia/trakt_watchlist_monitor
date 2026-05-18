@@ -72,8 +72,15 @@ def upsert_price(
 
 
 def was_notified(
-    conn: sqlite3.Connection, trakt_id: int, media_type: str, quality: str, price: float
+    conn: sqlite3.Connection,
+    trakt_id: int,
+    media_type: str,
+    quality: str,
+    price: float,
+    last_price: float | None = None,
 ) -> bool:
+    # last_price is the most recently stored price. If it exceeds the notified price,
+    # the price went up since we last notified, resetting the "on sale" state.
     row = conn.execute(
         """
         SELECT 1
@@ -82,9 +89,10 @@ def was_notified(
             AND media_type = ?
             AND quality = ?
             AND price >= ?
+            AND (? IS NULL OR ? <= price)
         LIMIT 1
         """,
-        (trakt_id, media_type, quality, price),
+        (trakt_id, media_type, quality, price, last_price, last_price),
     ).fetchone()
     return row is not None
 
