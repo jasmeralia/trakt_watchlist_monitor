@@ -151,11 +151,13 @@ def _normalize_watchlist_item(item: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     tmdb_id = ids.get("tmdb")
+    slug = ids.get("slug")
     return {
         "trakt_id": trakt_id,
         "media_type": media_type,
         "title": str(media.get("title", "")),
         "tmdb_id": tmdb_id if isinstance(tmdb_id, int) else None,
+        "trakt_slug": slug if isinstance(slug, str) else None,
     }
 
 

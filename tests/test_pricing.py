@@ -7,6 +7,7 @@ import pricing
 from pricing import meets_discount_threshold, select_best_quality
 
 
+
 class FakeConnection:
     def __init__(self) -> None:
         self.closed = False
@@ -73,7 +74,7 @@ class TestMeetsDiscountThreshold:
 class TestCheckPrices:
     def test_sends_alert_when_threshold_is_met(self, monkeypatch: pytest.MonkeyPatch) -> None:
         conn = FakeConnection()
-        send_alert = Mock()
+        send_digest = Mock()
         log_notification = Mock()
         upsert_price = Mock()
 
@@ -90,6 +91,7 @@ class TestCheckPrices:
                         "media_type": "movie",
                         "title": "Example Movie",
                         "tmdb_id": 456,
+                        "trakt_slug": "example-movie",
                     }
                 ]
             ),
@@ -97,17 +99,22 @@ class TestCheckPrices:
         monkeypatch.setattr(
             pricing.justwatch,
             "get_amazon_prices",
-            Mock(return_value=[{"quality": "HD", "price": 7.99, "currency": "USD"}]),
+            Mock(return_value=([{"quality": "HD", "price": 7.99, "currency": "USD"}], None, None)),
         )
         monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
         monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "log_notification", log_notification)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
-        send_alert.assert_called_once()
+        send_digest.assert_called_once()
+        drops = send_digest.call_args.args[0]
+        assert len(drops) == 1
+        assert drops[0].trakt_id == 123
+        assert drops[0].current_price == 7.99
+        assert drops[0].trakt_url == "https://trakt.tv/movies/example-movie"
         log_notification.assert_called_once_with(conn, 123, "movie", "HD", 7.99, 12.99)
         upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 7.99, "USD")
         assert conn.closed is True
@@ -116,7 +123,7 @@ class TestCheckPrices:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         conn = FakeConnection()
-        send_alert = Mock()
+        send_digest = Mock()
         log_notification = Mock()
         upsert_price = Mock()
 
@@ -140,17 +147,17 @@ class TestCheckPrices:
         monkeypatch.setattr(
             pricing.justwatch,
             "get_amazon_prices",
-            Mock(return_value=[{"quality": "HD", "price": 11.99, "currency": "USD"}]),
+            Mock(return_value=([{"quality": "HD", "price": 11.99, "currency": "USD"}], None, None)),
         )
         monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
         monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "log_notification", log_notification)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
-        send_alert.assert_not_called()
+        send_digest.assert_not_called()
         log_notification.assert_not_called()
         upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 11.99, "USD")
         assert conn.closed is True
@@ -159,7 +166,7 @@ class TestCheckPrices:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         conn = FakeConnection()
-        send_alert = Mock()
+        send_digest = Mock()
         log_notification = Mock()
         upsert_price = Mock()
 
@@ -183,17 +190,17 @@ class TestCheckPrices:
         monkeypatch.setattr(
             pricing.justwatch,
             "get_amazon_prices",
-            Mock(return_value=[{"quality": "HD", "price": 7.99, "currency": "USD"}]),
+            Mock(return_value=([{"quality": "HD", "price": 7.99, "currency": "USD"}], None, None)),
         )
         monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=None))
         monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "log_notification", log_notification)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
-        send_alert.assert_not_called()
+        send_digest.assert_not_called()
         log_notification.assert_not_called()
         upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 7.99, "USD")
         assert conn.closed is True
@@ -202,7 +209,7 @@ class TestCheckPrices:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         conn = FakeConnection()
-        send_alert = Mock()
+        send_digest = Mock()
         log_notification = Mock()
         upsert_price = Mock()
 
@@ -226,24 +233,24 @@ class TestCheckPrices:
         monkeypatch.setattr(
             pricing.justwatch,
             "get_amazon_prices",
-            Mock(return_value=[{"quality": "HD", "price": 7.99, "currency": "USD"}]),
+            Mock(return_value=([{"quality": "HD", "price": 7.99, "currency": "USD"}], None, None)),
         )
         monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
         monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=True))
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "log_notification", log_notification)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
-        send_alert.assert_not_called()
+        send_digest.assert_not_called()
         log_notification.assert_not_called()
         upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 7.99, "USD")
         assert conn.closed is True
 
     def test_skips_item_with_no_justwatch_prices(self, monkeypatch: pytest.MonkeyPatch) -> None:
         conn = FakeConnection()
-        send_alert = Mock()
+        send_digest = Mock()
         upsert_price = Mock()
 
         monkeypatch.setattr(pricing.settings, "db_path", ":memory:")
@@ -262,13 +269,13 @@ class TestCheckPrices:
                 ]
             ),
         )
-        monkeypatch.setattr(pricing.justwatch, "get_amazon_prices", Mock(return_value=[]))
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.justwatch, "get_amazon_prices", Mock(return_value=([], None, None)))
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
-        send_alert.assert_not_called()
+        send_digest.assert_not_called()
         upsert_price.assert_not_called()
         assert conn.closed is True
 
@@ -298,7 +305,7 @@ class TestCheckPrices:
         monkeypatch.setattr(
             pricing.justwatch,
             "get_amazon_prices",
-            Mock(return_value=[{"quality": "HD", "price": 7.99, "currency": "EUR"}]),
+            Mock(return_value=([{"quality": "HD", "price": 7.99, "currency": "EUR"}], None, None)),
         )
         monkeypatch.setattr(pricing.db, "get_last_price", get_last_price)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
@@ -312,7 +319,7 @@ class TestCheckPrices:
 
     def test_skips_item_without_tmdb_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
         conn = FakeConnection()
-        send_alert = Mock()
+        send_digest = Mock()
         get_amazon_prices = Mock()
         upsert_price = Mock()
 
@@ -333,19 +340,19 @@ class TestCheckPrices:
             ),
         )
         monkeypatch.setattr(pricing.justwatch, "get_amazon_prices", get_amazon_prices)
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
         get_amazon_prices.assert_not_called()
-        send_alert.assert_not_called()
+        send_digest.assert_not_called()
         upsert_price.assert_not_called()
         assert conn.closed is True
 
     def test_stores_price_increase_without_alert(self, monkeypatch: pytest.MonkeyPatch) -> None:
         conn = FakeConnection()
-        send_alert = Mock()
+        send_digest = Mock()
         log_notification = Mock()
         upsert_price = Mock()
 
@@ -369,17 +376,17 @@ class TestCheckPrices:
         monkeypatch.setattr(
             pricing.justwatch,
             "get_amazon_prices",
-            Mock(return_value=[{"quality": "HD", "price": 14.99, "currency": "USD"}]),
+            Mock(return_value=([{"quality": "HD", "price": 14.99, "currency": "USD"}], None, None)),
         )
         monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
         monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "log_notification", log_notification)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
-        send_alert.assert_not_called()
+        send_digest.assert_not_called()
         log_notification.assert_not_called()
         upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 14.99, "USD")
         assert conn.closed is True
@@ -388,7 +395,7 @@ class TestCheckPrices:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         conn = FakeConnection()
-        send_alert = Mock()
+        send_digest = Mock()
         log_notification = Mock()
         was_notified = Mock(return_value=False)
         upsert_price = Mock()
@@ -413,17 +420,17 @@ class TestCheckPrices:
         monkeypatch.setattr(
             pricing.justwatch,
             "get_amazon_prices",
-            Mock(return_value=[{"quality": "HD", "price": 7.99, "currency": "USD"}]),
+            Mock(return_value=([{"quality": "HD", "price": 7.99, "currency": "USD"}], None, None)),
         )
         monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=0.0))
         monkeypatch.setattr(pricing.db, "was_notified", was_notified)
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "log_notification", log_notification)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
-        send_alert.assert_not_called()
+        send_digest.assert_not_called()
         log_notification.assert_not_called()
         was_notified.assert_not_called()
         upsert_price.assert_called_once_with(conn, 123, "movie", "HD", 7.99, "USD")
@@ -433,7 +440,7 @@ class TestCheckPrices:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         conn = FakeConnection()
-        send_alert = Mock(side_effect=smtplib.SMTPException("smtp failed"))
+        send_digest = Mock(side_effect=smtplib.SMTPException("smtp failed"))
         log_notification = Mock()
         upsert_price = Mock()
 
@@ -457,36 +464,36 @@ class TestCheckPrices:
         monkeypatch.setattr(
             pricing.justwatch,
             "get_amazon_prices",
-            Mock(return_value=[{"quality": "HD", "price": 7.99, "currency": "USD"}]),
+            Mock(return_value=([{"quality": "HD", "price": 7.99, "currency": "USD"}], None, None)),
         )
         monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
         monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "log_notification", log_notification)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
-        send_alert.assert_called_once()
+        send_digest.assert_called_once()
         log_notification.assert_not_called()
         upsert_price.assert_not_called()
-        assert "Failed to send price alert for 123: smtp failed" in capsys.readouterr().err
+        assert "Failed to send digest: smtp failed" in capsys.readouterr().err
         assert conn.closed is True
 
     def test_item_failure_continues_to_next_item(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         conn = FakeConnection()
-        send_alert = Mock()
+        send_digest = Mock()
         log_notification = Mock()
         upsert_price = Mock()
 
         def get_amazon_prices(
             tmdb_id: int, _media_type: str, _title: str
-        ) -> list[dict[str, object]]:
+        ) -> tuple[list[dict[str, object]], None, None]:
             if tmdb_id == 456:
                 raise ValueError("bad justwatch response")
-            return [{"quality": "HD", "price": 7.99, "currency": "USD"}]
+            return [{"quality": "HD", "price": 7.99, "currency": "USD"}], None, None
 
         monkeypatch.setattr(pricing.settings, "db_path", ":memory:")
         monkeypatch.setattr(pricing.settings, "discount_threshold_percent", 20.0)
@@ -514,13 +521,16 @@ class TestCheckPrices:
         monkeypatch.setattr(pricing.justwatch, "get_amazon_prices", get_amazon_prices)
         monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
         monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
-        monkeypatch.setattr(pricing.notify, "send_alert", send_alert)
+        monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "log_notification", log_notification)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
         pricing.check_prices()
 
-        send_alert.assert_called_once()
+        send_digest.assert_called_once()
+        drops = send_digest.call_args.args[0]
+        assert len(drops) == 1
+        assert drops[0].trakt_id == 789
         log_notification.assert_called_once_with(conn, 789, "movie", "HD", 7.99, 12.99)
         upsert_price.assert_called_once_with(conn, 789, "movie", "HD", 7.99, "USD")
         assert "Failed to process price for 123: bad justwatch response" in capsys.readouterr().err

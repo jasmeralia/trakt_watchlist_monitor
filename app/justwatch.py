@@ -13,6 +13,7 @@ GRAPHQL_URL = "https://apis.justwatch.com/graphql"
 AMAZON_PACKAGES = {"amazon"}
 
 PriceOffer = dict[str, str | float]
+JustWatchResult = tuple[list[PriceOffer], str | None, str | None]
 
 
 _HEADERS = {
@@ -25,9 +26,9 @@ _HEADERS = {
 }
 
 
-def get_amazon_prices(tmdb_id: int, media_type: str, title: str) -> list[PriceOffer]:
+def get_amazon_prices(tmdb_id: int, media_type: str, title: str) -> JustWatchResult:
     if not title:
-        return []
+        return [], None, None
     rate_limit.wait_between_api_requests()
     response = requests.post(
         GRAPHQL_URL,
@@ -43,22 +44,23 @@ def get_amazon_prices(tmdb_id: int, media_type: str, title: str) -> list[PriceOf
 
     payload = response.json()
     if not isinstance(payload, dict):
-        return []
+        return [], None, None
     if "errors" in payload:
         print(
             f"JustWatch GraphQL error: {_graphql_error_message(payload['errors'])}",
             file=sys.stderr,
         )
-        return []
+        return [], None, None
 
-    offers = _offers_for_matching_title(payload, tmdb_id)
+    offers, image_url, jw_url = _offers_for_matching_title(payload, tmdb_id)
 
-    return [
+    prices = [
         price
         for offer in offers
         if isinstance(offer, dict)
         if (price := _amazon_buy_price(offer)) is not None
     ]
+    return prices, image_url, jw_url
 
 
 def _popular_titles_variables(media_type: str, title: str) -> dict[str, object]:
@@ -80,28 +82,51 @@ def _object_type(media_type: str) -> str:
     return "MOVIE"
 
 
-def _offers_for_matching_title(payload: dict[Any, Any], tmdb_id: int) -> list[dict[str, Any]]:
+def _offers_for_matching_title(
+    payload: dict[Any, Any], tmdb_id: int
+) -> tuple[list[dict[str, Any]], str | None, str | None]:
     data = payload.get("data")
     if not isinstance(data, dict):
-        return []
+        return [], None, None
 
     popular_titles = data.get("popularTitles")
     if not isinstance(popular_titles, dict):
-        return []
+        return [], None, None
 
     edges = popular_titles.get("edges")
     if not isinstance(edges, list):
-        return []
+        return [], None, None
 
     for edge in edges:
         if not isinstance(edge, dict):
             continue
         node = edge.get("node")
-        if isinstance(node, dict) and _node_tmdb_id(node) == tmdb_id:
-            offers = node.get("offers")
-            if isinstance(offers, list):
-                return [offer for offer in offers if isinstance(offer, dict)]
-    return []
+        if not isinstance(node, dict) or _node_tmdb_id(node) != tmdb_id:
+            continue
+        offers = node.get("offers")
+        offer_list = [offer for offer in offers if isinstance(offer, dict)] if isinstance(offers, list) else []
+        image_url, jw_url = _node_content_metadata(node)
+        return offer_list, image_url, jw_url
+    return [], None, None
+
+
+def _node_content_metadata(node: dict[Any, Any]) -> tuple[str | None, str | None]:
+    content = node.get("content")
+    if not isinstance(content, dict):
+        return None, None
+    image_url = _build_poster_url(content.get("posterUrl"))
+    full_path = content.get("fullPath")
+    jw_url = f"https://www.justwatch.com{full_path}" if isinstance(full_path, str) and full_path else None
+    return image_url, jw_url
+
+
+def _build_poster_url(poster_url: object) -> str | None:
+    if not isinstance(poster_url, str) or not poster_url:
+        return None
+    url = poster_url.replace("{profile}", "166")
+    if url.startswith("/"):
+        url = "https://images.justwatch.com" + url
+    return url
 
 
 def _node_tmdb_id(node: dict[Any, Any]) -> int | None:
@@ -207,6 +232,8 @@ query GetPopularTitles(
           externalIds {
             tmdbId
           }
+          posterUrl
+          fullPath
         }
         offers(country: $country, platform: $platform) {
           monetizationType

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>{% if drops|length == 1 %}Price drop: {{ drops[0].title }}{% else %}Price drops: {{ drops|length }} watchlist titles on sale{% endif %}</title>
+
+  <style>
+    /* ============================================================
+       BASE (GMAIL FALLBACK) – LIGHT THEME
+       Gmail Desktop dark mode will use THIS, not the dark theme.
+       ============================================================ */
+    body {
+      background: #F1F3F4 !important;
+      color: #202124 !important;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .card {
+      background: #FFFFFF !important;
+      border: 1px solid #E0E0E0 !important;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    a {
+      color: #1a73e8 !important;
+    }
+
+    /* ============================================================
+       TRUE DARK MODE – applied in all NON-GMAIL clients
+       ============================================================ */
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #202124 !important;
+        color: #E8EAED !important;
+      }
+      .container {
+        background: #202124 !important;
+      }
+      h2 {
+        color: #E8EAED !important;
+      }
+      .card {
+        background: #2A2C2F !important;
+        border-color: #3C4043 !important;
+        color: #E8EAED !important;
+      }
+      a {
+        color: #8AB4F8 !important;
+      }
+    }
+
+    /* ============================================================
+       HARD GMAIL WEB DARK-MODE BYPASS
+       ============================================================ */
+    u + .container body {
+      background: #202124 !important;
+      color: #E8EAED !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <h2>{% if drops|length == 1 %}Price drop on your watchlist{% else %}{{ drops|length }} watchlist titles on sale{% endif %}</h2>
+
+    {% for drop in drops %}
+      <div class="card">
+        <div style="margin:0 0 4px 0;font-size:16px;font-weight:bold;">
+          {% if drop.trakt_url %}
+            <a href="{{ drop.trakt_url }}">{{ drop.title }}</a>
+          {% else %}
+            {{ drop.title }}
+          {% endif %}
+        </div>
+        <div style="font-size:14px;">
+          {{ drop.currency }} {{ "%.2f" | format(drop.last_price) }}
+          &rarr; {{ drop.currency }} {{ "%.2f" | format(drop.current_price) }}
+          <span style="color:#34A853 !important;">({{ "%.1f" | format(drop.drop_percent) }}% off)</span>
+          &nbsp;<span style="font-size:11px;color:#9AA0A6 !important;">{{ drop.quality }}</span>
+          {% if drop.jw_url %}
+            &nbsp;&middot;&nbsp;<a href="{{ drop.jw_url }}" style="font-size:11px;">JustWatch</a>
+          {% endif %}
+        </div>
+        {% if drop.image_url %}
+          <div style="margin-top:10px;">
+            <img src="{{ drop.image_url }}" width="120" alt="{{ drop.title }}"
+                 style="border-radius:6px;object-fit:cover;display:block;" />
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    <div style="margin-top:4px;font-size:11px;color:#9AA0A6 !important;text-align:center;">
+      This email was sent by
+      <a href="https://github.com/jasmeralia/trakt_watchlist_monitor">Trakt Watchlist Monitor</a>{% if app_version %} v{{ app_version }}{% endif %}
+      &copy; 2025 by
+      <a href="https://x.com/jasmeralia">Morgan Blackthorne</a>
+      <a href="https://x.com/jasmeralia">
+        <img src="https://abs.twimg.com/responsive-web/client-web/icon-ios.b1fc7275.png"
+             width="14" height="14" style="vertical-align:middle;" />
+      </a>
+      <a href="https://discord.gg/Seyngsh5MF">
+        <img src="https://raw.githubusercontent.com/jasmeralia/wishlist_monitor/master/static/icons/discord.png"
+             width="14" height="14" style="vertical-align:middle;" />
+      </a>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     api_request_interval_seconds: float = Field(default=1.5, ge=0)
     db_path: str = "/data/prices.db"
     log_level: LogLevel = "INFO"
+    email_theme: str = "dark"
+    app_version: str = ""
+
+    @field_validator("email_theme", mode="before")
+    @classmethod
+    def normalize_email_theme(cls, value: object) -> str:
+        if isinstance(value, str) and value.strip().lower() in {"dark", "light"}:
+            return value.strip().lower()
+        return "dark"
 
     @field_validator("log_level", mode="before")
     @classmethod

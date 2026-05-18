@@ -2,3 +2,4 @@ requests>=2.32
 python-dateutil>=2.9
 pydantic>=2.7
 pydantic-settings>=2.3
+jinja2>=3.1

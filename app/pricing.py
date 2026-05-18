@@ -25,6 +25,9 @@ class PriceDrop:
     current_price: float
     currency: str
     last_price: float
+    image_url: str | None = None
+    trakt_url: str | None = None
+    jw_url: str | None = None
 
 
 def select_best_quality(prices: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -60,17 +63,6 @@ def _new_stats() -> dict[str, int]:
     }
 
 
-def _send_price_alert(
-    item: dict[str, Any], currency: str, last_price: float, current_price: float
-) -> None:
-    drop_percent = (last_price - current_price) / last_price * 100
-    title = f"Price drop: {item.get('title', 'Watchlist item')}"
-    body = (
-        f"{item.get('title', 'Watchlist item')} dropped from "
-        f"{currency} {last_price:.2f} to {currency} {current_price:.2f} "
-        f"({drop_percent:.1f}% off)."
-    )
-    notify.send_alert(title, body)
 
 
 def _format_prices(prices: list[dict[str, Any]]) -> str:
@@ -125,6 +117,7 @@ def _process_watchlist_item(
     item: dict[str, Any],
     item_fields: tuple[int, str, int],
     stats: dict[str, int],
+    qualified_drops: list[PriceDrop],
 ) -> None:
     trakt_id, media_type, tmdb_id = item_fields
     logger.debug(
@@ -135,7 +128,7 @@ def _process_watchlist_item(
         item.get("title", ""),
     )
 
-    prices = justwatch.get_amazon_prices(tmdb_id, media_type, str(item.get("title", "")))
+    prices, image_url, jw_url = justwatch.get_amazon_prices(tmdb_id, media_type, str(item.get("title", "")))
     logger.debug(
         "Prices seen for trakt_id=%d media_type=%s tmdb_id=%d: offer_count=%d offers=%s",
         trakt_id,
@@ -185,6 +178,8 @@ def _process_watchlist_item(
         return
 
     if last_price != 0.0 and current_price < last_price:
+        slug = item.get("trakt_slug")
+        trakt_url = f"https://trakt.tv/{media_type}s/{slug}" if isinstance(slug, str) and slug else None
         price_drop = PriceDrop(
             item=item,
             trakt_id=trakt_id,
@@ -193,9 +188,12 @@ def _process_watchlist_item(
             current_price=current_price,
             currency=currency,
             last_price=last_price,
+            image_url=image_url,
+            trakt_url=trakt_url,
+            jw_url=jw_url,
         )
-        should_record_price = _handle_price_drop(conn, price_drop, stats)
-        if not should_record_price:
+        if _qualify_price_drop(conn, price_drop, stats):
+            qualified_drops.append(price_drop)
             return
     else:
         logger.debug(
@@ -209,7 +207,7 @@ def _process_watchlist_item(
     db.upsert_price(conn, trakt_id, media_type, quality, current_price, currency)
 
 
-def _handle_price_drop(
+def _qualify_price_drop(
     conn: sqlite3.Connection,
     price_drop: PriceDrop,
     stats: dict[str, int],
@@ -232,7 +230,7 @@ def _handle_price_drop(
             price_drop.trakt_id,
             settings.discount_threshold_percent,
         )
-        return True
+        return False
     if db.was_notified(
         conn,
         price_drop.trakt_id,
@@ -245,37 +243,14 @@ def _handle_price_drop(
             price_drop.trakt_id,
             price_drop.current_price,
         )
-        return True
-
-    try:
-        _send_price_alert(
-            price_drop.item,
-            price_drop.currency,
-            price_drop.last_price,
-            price_drop.current_price,
-        )
-    except (OSError, smtplib.SMTPException) as exc:
-        stats["alert_failures"] += 1
-        print(
-            f"Failed to send price alert for {price_drop.trakt_id}: {exc}",
-            file=sys.stderr,
-        )
         return False
-    stats["alerts_sent"] += 1
-    db.log_notification(
-        conn,
-        price_drop.trakt_id,
-        price_drop.media_type,
-        price_drop.quality,
-        price_drop.current_price,
-        price_drop.last_price,
-    )
     return True
 
 
 def check_prices() -> None:
     conn = db.init_db(settings.db_path)
     stats = _new_stats()
+    qualified_drops: list[PriceDrop] = []
     logger.info("Checking watchlist prices")
     # pylint: disable=too-many-nested-blocks
     try:
@@ -287,12 +262,24 @@ def check_prices() -> None:
                 continue
 
             try:
-                _process_watchlist_item(conn, item, item_fields, stats)
+                _process_watchlist_item(conn, item, item_fields, stats, qualified_drops)
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 stats["item_errors"] += 1
                 trakt_id = item_fields[0]
                 print(f"Failed to process price for {trakt_id}: {exc}", file=sys.stderr)
                 continue
+
+        if qualified_drops:
+            try:
+                notify.send_digest(qualified_drops)
+                for drop in qualified_drops:
+                    stats["prices_recorded"] += 1
+                    db.upsert_price(conn, drop.trakt_id, drop.media_type, drop.quality, drop.current_price, drop.currency)
+                    db.log_notification(conn, drop.trakt_id, drop.media_type, drop.quality, drop.current_price, drop.last_price)
+                stats["alerts_sent"] += len(qualified_drops)
+            except (OSError, smtplib.SMTPException) as exc:
+                stats["alert_failures"] += len(qualified_drops)
+                print(f"Failed to send digest: {exc}", file=sys.stderr)
     finally:
         conn.close()
     _log_stats(stats)

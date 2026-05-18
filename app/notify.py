@@ -1,16 +1,55 @@
 import smtplib
 from email.message import EmailMessage
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from jinja2 import Environment, FileSystemLoader
 
 from config import settings
 
+if TYPE_CHECKING:
+    from pricing import PriceDrop
 
-def send_alert(title: str, body: str) -> None:
+_TEMPLATE_DIR = Path(__file__).parent / "templates"
+
+
+def send_digest(drops: "list[PriceDrop]") -> None:
+    env = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)), autoescape=True)
+    template = env.get_template(f"email_{settings.email_theme}.html")
+    html = template.render(
+        drops=[_drop_to_dict(d) for d in drops],
+        app_version=settings.app_version or None,
+    )
+
+    if len(drops) == 1:
+        subject = f"[Trakt Watchlist Monitor] Price drop: {drops[0].item.get('title', 'Watchlist item')}"
+    else:
+        subject = f"[Trakt Watchlist Monitor] Price drops: {len(drops)} watchlist titles on sale"
+
     message = EmailMessage()
     message["From"] = settings.smtp_from
     message["To"] = settings.smtp_to
-    message["Subject"] = title
-    message.set_content(body)
+    message["Subject"] = subject
+    message.set_content("")
+    message.add_alternative(html, subtype="html")
+    _send(message)
 
+
+def _drop_to_dict(drop: "PriceDrop") -> dict[str, Any]:
+    return {
+        "title": drop.item.get("title", "Watchlist item"),
+        "currency": drop.currency,
+        "last_price": drop.last_price,
+        "current_price": drop.current_price,
+        "drop_percent": (drop.last_price - drop.current_price) / drop.last_price * 100,
+        "quality": drop.quality,
+        "image_url": drop.image_url,
+        "trakt_url": drop.trakt_url,
+        "jw_url": drop.jw_url,
+    }
+
+
+def _send(message: EmailMessage) -> None:
     if settings.smtp_port == 465:
         with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=30) as smtp:
             smtp.login(settings.smtp_username, settings.smtp_password)

@@ -27,10 +27,13 @@ def test_get_amazon_prices_returns_amazon_buy_offers(monkeypatch: pytest.MonkeyP
     calls: list[dict[str, Any]] = []
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), calls))
 
-    assert justwatch.get_amazon_prices(329865, "movie", "Arrival") == [
+    prices, image_url, jw_url = justwatch.get_amazon_prices(329865, "movie", "Arrival")
+    assert prices == [
         {"quality": "UHD", "price": 14.99, "currency": "USD"},
         {"quality": "HD", "price": 9.99, "currency": "USD"},
     ]
+    assert image_url == "https://images.justwatch.com/poster/abc123/s166"
+    assert jw_url == "https://www.justwatch.com/us/movie/arrival"
     assert calls[0]["url"] == "https://apis.justwatch.com/graphql"
     assert calls[0]["json"]["operationName"] == "GetPopularTitles"
     assert calls[0]["json"]["variables"]["popularTitlesFilter"] == {
@@ -47,7 +50,8 @@ def test_get_amazon_prices_show_uses_show_object_type(monkeypatch: pytest.Monkey
         _post_factory(FakeResponse(_payload([], tmdb_id=12345)), calls),
     )
 
-    justwatch.get_amazon_prices(12345, "show", "Example Show")
+    prices, _, _ = justwatch.get_amazon_prices(12345, "show", "Example Show")
+    assert prices == []
 
     assert calls[0]["json"]["variables"]["popularTitlesFilter"] == {
         "objectTypes": ["SHOW"],
@@ -56,7 +60,10 @@ def test_get_amazon_prices_show_uses_show_object_type(monkeypatch: pytest.Monkey
 
 
 def test_get_amazon_prices_returns_empty_list_when_title_is_missing() -> None:
-    assert justwatch.get_amazon_prices(329865, "movie", "") == []
+    prices, image_url, jw_url = justwatch.get_amazon_prices(329865, "movie", "")
+    assert prices == []
+    assert image_url is None
+    assert jw_url is None
 
 
 def test_get_amazon_prices_returns_empty_list_when_not_found(
@@ -69,14 +76,16 @@ def test_get_amazon_prices_returns_empty_list_when_not_found(
         _post_factory(FakeResponse({"data": {"popularTitles": {"edges": []}}}), calls),
     )
 
-    assert justwatch.get_amazon_prices(329865, "movie", "Missing Movie") == []
+    prices, _, _ = justwatch.get_amazon_prices(329865, "movie", "Missing Movie")
+    assert prices == []
 
 
 def test_get_amazon_prices_ignores_wrong_tmdb_match(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _payload([_offer("amazon", "BUY", "HD", "$9.99", "USD")], tmdb_id=1)
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
-    assert justwatch.get_amazon_prices(329865, "movie", "Arrival") == []
+    prices, _, _ = justwatch.get_amazon_prices(329865, "movie", "Arrival")
+    assert prices == []
 
 
 def test_get_amazon_prices_returns_empty_list_for_graphql_errors(
@@ -85,7 +94,8 @@ def test_get_amazon_prices_returns_empty_list_for_graphql_errors(
     payload = {"errors": [{"message": "title lookup failed"}], "data": None}
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
-    assert justwatch.get_amazon_prices(329865, "movie", "Arrival") == []
+    prices, _, _ = justwatch.get_amazon_prices(329865, "movie", "Arrival")
+    assert prices == []
     assert "JustWatch GraphQL error: title lookup failed" in capsys.readouterr().err
 
 
@@ -102,17 +112,16 @@ def test_get_amazon_prices_filters_out_non_amazon_offers(
     calls: list[dict[str, Any]] = []
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), calls))
 
-    assert justwatch.get_amazon_prices(329865, "movie", "Arrival") == [
-        {"quality": "HD", "price": 9.99, "currency": "USD"}
-    ]
+    prices, _, _ = justwatch.get_amazon_prices(329865, "movie", "Arrival")
+    assert prices == [{"quality": "HD", "price": 9.99, "currency": "USD"}]
 
 
 def test_get_amazon_prices_parses_string_price(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _payload([_offer("amazon", "BUY", "HD", "$12.99", "USD")], tmdb_id=1)
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
-    result = justwatch.get_amazon_prices(1, "movie", "Example Movie")
-    assert result == [{"quality": "HD", "price": 12.99, "currency": "USD"}]
+    prices, _, _ = justwatch.get_amazon_prices(1, "movie", "Example Movie")
+    assert prices == [{"quality": "HD", "price": 12.99, "currency": "USD"}]
 
 
 def test_get_amazon_prices_prefers_retail_price_value(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -121,8 +130,8 @@ def test_get_amazon_prices_prefers_retail_price_value(monkeypatch: pytest.Monkey
     payload = _payload([offer], tmdb_id=1)
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
-    result = justwatch.get_amazon_prices(1, "movie", "Example Movie")
-    assert result == [{"quality": "HD", "price": 9.99, "currency": "USD"}]
+    prices, _, _ = justwatch.get_amazon_prices(1, "movie", "Example Movie")
+    assert prices == [{"quality": "HD", "price": 9.99, "currency": "USD"}]
 
 
 def test_get_amazon_prices_parses_comma_decimal_price(
@@ -131,8 +140,8 @@ def test_get_amazon_prices_parses_comma_decimal_price(
     payload = _payload([_offer("amazon", "BUY", "HD", "€9,99", "EUR")], tmdb_id=1)
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
-    result = justwatch.get_amazon_prices(1, "movie", "Example Movie")
-    assert result == [{"quality": "HD", "price": 9.99, "currency": "EUR"}]
+    prices, _, _ = justwatch.get_amazon_prices(1, "movie", "Example Movie")
+    assert prices == [{"quality": "HD", "price": 9.99, "currency": "EUR"}]
 
 
 def test_get_amazon_prices_parses_thousands_separator_price(
@@ -141,24 +150,42 @@ def test_get_amazon_prices_parses_thousands_separator_price(
     payload = _payload([_offer("amazon", "BUY", "HD", "1,299.00", "USD")], tmdb_id=1)
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
-    result = justwatch.get_amazon_prices(1, "movie", "Example Movie")
-    assert result == [{"quality": "HD", "price": 1299.0, "currency": "USD"}]
+    prices, _, _ = justwatch.get_amazon_prices(1, "movie", "Example Movie")
+    assert prices == [{"quality": "HD", "price": 1299.0, "currency": "USD"}]
 
 
 def test_get_amazon_prices_parses_numeric_price(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _payload([_offer("amazon", "BUY", "HD", 9.99, "USD")], tmdb_id=1)
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
-    result = justwatch.get_amazon_prices(1, "movie", "Example Movie")
-    assert result == [{"quality": "HD", "price": 9.99, "currency": "USD"}]
+    prices, _, _ = justwatch.get_amazon_prices(1, "movie", "Example Movie")
+    assert prices == [{"quality": "HD", "price": 9.99, "currency": "USD"}]
 
 
 def test_get_amazon_prices_maps_4k_to_uhd(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = _payload([_offer("amazon", "BUY", "_4K", "$19.99", "USD")], tmdb_id=1)
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
-    result = justwatch.get_amazon_prices(1, "movie", "Example Movie")
-    assert result == [{"quality": "UHD", "price": 19.99, "currency": "USD"}]
+    prices, _, _ = justwatch.get_amazon_prices(1, "movie", "Example Movie")
+    assert prices == [{"quality": "UHD", "price": 19.99, "currency": "USD"}]
+
+
+def test_get_amazon_prices_returns_poster_url_and_jw_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = _payload([_offer("amazon", "BUY", "HD", "$9.99", "USD")])
+    monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
+
+    _, image_url, jw_url = justwatch.get_amazon_prices(329865, "movie", "Arrival")
+    assert image_url == "https://images.justwatch.com/poster/abc123/s166"
+    assert jw_url == "https://www.justwatch.com/us/movie/arrival"
+
+
+def test_get_amazon_prices_handles_missing_poster_and_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = _payload([_offer("amazon", "BUY", "HD", "$9.99", "USD")], poster_url=None, full_path=None)
+    monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
+
+    _, image_url, jw_url = justwatch.get_amazon_prices(329865, "movie", "Arrival")
+    assert image_url is None
+    assert jw_url is None
 
 
 def _post_factory(
@@ -171,14 +198,23 @@ def _post_factory(
     return post
 
 
-def _payload(offers: list[dict[str, Any]], tmdb_id: int = 329865) -> dict[str, Any]:
+def _payload(
+    offers: list[dict[str, Any]],
+    tmdb_id: int = 329865,
+    poster_url: str | None = "https://images.justwatch.com/poster/abc123/s{profile}",
+    full_path: str | None = "/us/movie/arrival",
+) -> dict[str, Any]:
     return {
         "data": {
             "popularTitles": {
                 "edges": [
                     {
                         "node": {
-                            "content": {"externalIds": {"tmdbId": str(tmdb_id)}},
+                            "content": {
+                                "externalIds": {"tmdbId": str(tmdb_id)},
+                                "posterUrl": poster_url,
+                                "fullPath": full_path,
+                            },
                             "offers": offers,
                         }
                     }
