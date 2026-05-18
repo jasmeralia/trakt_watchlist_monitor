@@ -180,7 +180,9 @@ def test_get_amazon_prices_returns_poster_url_and_jw_url(monkeypatch: pytest.Mon
 
 
 def test_get_amazon_prices_handles_missing_poster_and_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    payload = _payload([_offer("amazon", "BUY", "HD", "$9.99", "USD")], poster_url=None, full_path=None)
+    payload = _payload(
+        [_offer("amazon", "BUY", "HD", "$9.99", "USD")], poster_url=None, full_path=None
+    )
     monkeypatch.setattr(justwatch.requests, "post", _post_factory(FakeResponse(payload), []))
 
     _, image_url, jw_url = justwatch.get_amazon_prices(329865, "movie", "Arrival")

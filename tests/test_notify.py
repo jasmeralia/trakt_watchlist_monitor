@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-def _make_drop(title: str = "Example Movie", last_price: float = 12.99, current_price: float = 7.99) -> object:
+def _make_drop(
+    title: str = "Example Movie", last_price: float = 12.99, current_price: float = 7.99
+) -> object:
     return SimpleNamespace(
         item={"title": title},
         currency="USD",

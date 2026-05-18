@@ -104,7 +104,11 @@ def _offers_for_matching_title(
         if not isinstance(node, dict) or _node_tmdb_id(node) != tmdb_id:
             continue
         offers = node.get("offers")
-        offer_list = [offer for offer in offers if isinstance(offer, dict)] if isinstance(offers, list) else []
+        offer_list = (
+            [offer for offer in offers if isinstance(offer, dict)]
+            if isinstance(offers, list)
+            else []
+        )
         image_url, jw_url = _node_content_metadata(node)
         return offer_list, image_url, jw_url
     return [], None, None
@@ -116,7 +120,11 @@ def _node_content_metadata(node: dict[Any, Any]) -> tuple[str | None, str | None
         return None, None
     image_url = _build_poster_url(content.get("posterUrl"))
     full_path = content.get("fullPath")
-    jw_url = f"https://www.justwatch.com{full_path}" if isinstance(full_path, str) and full_path else None
+    jw_url = (
+        f"https://www.justwatch.com{full_path}"
+        if isinstance(full_path, str) and full_path
+        else None
+    )
     return image_url, jw_url
 
 
