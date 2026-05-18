@@ -665,6 +665,95 @@ class TestCheckPrices:
         assert "Failed to send digest: smtp failed" in capsys.readouterr().err
         assert conn.closed is True
 
+    def test_add_to_sale_list_called_for_qualifying_drop(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        conn = FakeConnection()
+        add_to_sale_list = Mock()
+        remove_from_sale_list = Mock()
+
+        monkeypatch.setattr(pricing.settings, "db_path", ":memory:")
+        monkeypatch.setattr(pricing.settings, "discount_threshold_percent", 20.0)
+        monkeypatch.setattr(pricing.settings, "sale_price_threshold", 5.0)
+        monkeypatch.setattr(pricing.settings, "sale_list_slug", "on-sale")
+        monkeypatch.setattr(pricing.db, "init_db", Mock(return_value=conn))
+        monkeypatch.setattr(
+            pricing.trakt,
+            "get_effective_watchlist",
+            Mock(
+                return_value=[
+                    {
+                        "trakt_id": 123,
+                        "media_type": "movie",
+                        "title": "Example Movie",
+                        "tmdb_id": 456,
+                        "trakt_slug": "example-movie",
+                    }
+                ]
+            ),
+        )
+        monkeypatch.setattr(
+            pricing.justwatch,
+            "get_amazon_prices",
+            Mock(return_value=([{"quality": "HD", "price": 7.99, "currency": "USD"}], None, None)),
+        )
+        monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
+        monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
+        monkeypatch.setattr(pricing.notify, "send_digest", Mock())
+        monkeypatch.setattr(pricing.db, "log_notification", Mock())
+        monkeypatch.setattr(pricing.db, "upsert_price", Mock())
+        monkeypatch.setattr(pricing.trakt, "add_to_sale_list", add_to_sale_list)
+        monkeypatch.setattr(pricing.trakt, "remove_from_sale_list", remove_from_sale_list)
+
+        pricing.check_prices()
+
+        add_to_sale_list.assert_called_once_with(123, "movie")
+        remove_from_sale_list.assert_not_called()
+
+    def test_remove_from_sale_list_called_when_price_increases(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        conn = FakeConnection()
+        add_to_sale_list = Mock()
+        remove_from_sale_list = Mock()
+
+        monkeypatch.setattr(pricing.settings, "db_path", ":memory:")
+        monkeypatch.setattr(pricing.settings, "discount_threshold_percent", 20.0)
+        monkeypatch.setattr(pricing.settings, "sale_price_threshold", 5.0)
+        monkeypatch.setattr(pricing.settings, "sale_list_slug", "on-sale")
+        monkeypatch.setattr(pricing.db, "init_db", Mock(return_value=conn))
+        monkeypatch.setattr(
+            pricing.trakt,
+            "get_effective_watchlist",
+            Mock(
+                return_value=[
+                    {
+                        "trakt_id": 123,
+                        "media_type": "movie",
+                        "title": "Example Movie",
+                        "tmdb_id": 456,
+                    }
+                ]
+            ),
+        )
+        monkeypatch.setattr(
+            pricing.justwatch,
+            "get_amazon_prices",
+            Mock(return_value=([{"quality": "HD", "price": 14.99, "currency": "USD"}], None, None)),
+        )
+        monkeypatch.setattr(pricing.db, "get_last_price", Mock(return_value=12.99))
+        monkeypatch.setattr(pricing.db, "was_notified", Mock(return_value=False))
+        monkeypatch.setattr(pricing.notify, "send_digest", Mock())
+        monkeypatch.setattr(pricing.db, "log_notification", Mock())
+        monkeypatch.setattr(pricing.db, "upsert_price", Mock())
+        monkeypatch.setattr(pricing.trakt, "add_to_sale_list", add_to_sale_list)
+        monkeypatch.setattr(pricing.trakt, "remove_from_sale_list", remove_from_sale_list)
+
+        pricing.check_prices()
+
+        remove_from_sale_list.assert_called_once_with(123, "movie")
+        add_to_sale_list.assert_not_called()
+
     def test_item_failure_continues_to_next_item(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:

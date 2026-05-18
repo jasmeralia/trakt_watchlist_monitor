@@ -91,8 +91,36 @@ def _pagination_page_count(response: requests.Response) -> int:
         return 1
 
 
+def add_to_sale_list(trakt_id: int, media_type: str) -> None:
+    if not settings.sale_list_slug:
+        return
+    _request_with_refresh(
+        "POST",
+        f"/users/{settings.trakt_username}/lists/{settings.sale_list_slug}/items",
+        json=_list_item_body(trakt_id, media_type),
+    )
+
+
+def remove_from_sale_list(trakt_id: int, media_type: str) -> None:
+    if not settings.sale_list_slug:
+        return
+    _request_with_refresh(
+        "POST",
+        f"/users/{settings.trakt_username}/lists/{settings.sale_list_slug}/items/remove",
+        json=_list_item_body(trakt_id, media_type),
+    )
+
+
+def _list_item_body(trakt_id: int, media_type: str) -> dict[str, Any]:
+    key = "movies" if media_type == "movie" else "shows"
+    return {key: [{"ids": {"trakt": trakt_id}}]}
+
+
 def _request_with_refresh(
-    method: str, path: str, params: dict[str, int] | None = None
+    method: str,
+    path: str,
+    params: dict[str, int] | None = None,
+    json: dict[str, Any] | None = None,
 ) -> requests.Response:
     session = requests.Session()
     rate_limit.wait_between_api_requests()
@@ -101,6 +129,7 @@ def _request_with_refresh(
         f"{BASE_URL}{path}",
         headers=_headers(),
         params=params,
+        json=json,
         timeout=30,
     )
     if response.status_code != 401:
@@ -114,6 +143,7 @@ def _request_with_refresh(
         f"{BASE_URL}{path}",
         headers=_headers(),
         params=params,
+        json=json,
         timeout=30,
     )
     response.raise_for_status()

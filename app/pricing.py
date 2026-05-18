@@ -171,9 +171,18 @@ def _process_watchlist_item(  # pylint: disable=too-many-locals
     )
 
     slug = item.get("trakt_slug")
-    trakt_url = (
-        f"https://trakt.tv/{media_type}s/{slug}" if isinstance(slug, str) and slug else None
+    trakt_url = f"https://trakt.tv/{media_type}s/{slug}" if isinstance(slug, str) and slug else None
+
+    on_sale = current_price < settings.sale_price_threshold or (
+        last_price is not None
+        and last_price != 0.0
+        and current_price < last_price
+        and meets_discount_threshold(last_price, current_price, settings.discount_threshold_percent)
     )
+    if on_sale:
+        trakt.add_to_sale_list(trakt_id, media_type)
+    else:
+        trakt.remove_from_sale_list(trakt_id, media_type)
 
     if last_price is None:
         stats["first_observations"] += 1

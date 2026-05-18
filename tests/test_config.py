@@ -29,6 +29,10 @@ def test_log_level_rejects_unknown_value() -> None:
         _settings(log_level="verbose")
 
 
+def test_check_interval_hours_defaults_to_six() -> None:
+    assert _settings().check_interval_hours == 6.0
+
+
 def _settings(**overrides: object) -> Settings:
     values = {
         "trakt_client_id": "client-id",

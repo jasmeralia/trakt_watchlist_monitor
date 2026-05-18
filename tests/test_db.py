@@ -1,6 +1,13 @@
 import sqlite3
 
-from db import get_last_price, init_db, log_notification, upsert_price, was_notified
+from db import (
+    get_last_price,
+    init_db,
+    log_notification,
+    reset_notification_state,
+    upsert_price,
+    was_notified,
+)
 
 
 def test_init_db_creates_tables() -> None:
@@ -67,6 +74,71 @@ def test_was_notified_returns_true_for_price_below_logged_price() -> None:
         log_notification(conn, 1, "movie", "HD", 10.00, 12.99)
 
         assert was_notified(conn, 1, "movie", "HD", 7.99) is True
+    finally:
+        conn.close()
+
+
+def test_reset_notification_state_restores_price_from_original_price() -> None:
+    conn = init_db(":memory:")
+    try:
+        upsert_price(conn, 1, "movie", "HD", 7.99)
+        log_notification(conn, 1, "movie", "HD", 7.99, 12.99)
+
+        counts = reset_notification_state(conn)
+
+        assert get_last_price(conn, 1, "movie", "HD") == 12.99
+        assert counts["prices_restored"] == 1
+        assert counts["prices_cleared"] == 0
+        assert counts["notifications_cleared"] == 1
+        assert not was_notified(conn, 1, "movie", "HD", 7.99)
+    finally:
+        conn.close()
+
+
+def test_reset_notification_state_clears_first_obs_below_threshold() -> None:
+    conn = init_db(":memory:")
+    try:
+        upsert_price(conn, 1, "movie", "HD", 3.99)
+        log_notification(conn, 1, "movie", "HD", 3.99, 0.0)
+
+        counts = reset_notification_state(conn)
+
+        assert get_last_price(conn, 1, "movie", "HD") is None
+        assert counts["prices_restored"] == 0
+        assert counts["prices_cleared"] == 1
+        assert counts["notifications_cleared"] == 1
+    finally:
+        conn.close()
+
+
+def test_reset_notification_state_leaves_unnotified_items_untouched() -> None:
+    conn = init_db(":memory:")
+    try:
+        upsert_price(conn, 1, "movie", "HD", 9.99)
+
+        counts = reset_notification_state(conn)
+
+        assert get_last_price(conn, 1, "movie", "HD") == 9.99
+        assert counts["prices_restored"] == 0
+        assert counts["prices_cleared"] == 0
+        assert counts["notifications_cleared"] == 0
+    finally:
+        conn.close()
+
+
+def test_reset_notification_state_uses_most_recent_non_zero_original_price() -> None:
+    conn = init_db(":memory:")
+    try:
+        upsert_price(conn, 1, "movie", "HD", 5.99)
+        log_notification(conn, 1, "movie", "HD", 9.99, 0.0)
+        log_notification(conn, 1, "movie", "HD", 5.99, 9.99)
+
+        counts = reset_notification_state(conn)
+
+        assert get_last_price(conn, 1, "movie", "HD") == 9.99
+        assert counts["prices_restored"] == 1
+        assert counts["prices_cleared"] == 0
+        assert counts["notifications_cleared"] == 2
     finally:
         conn.close()
 
