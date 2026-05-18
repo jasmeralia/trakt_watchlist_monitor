@@ -19,6 +19,7 @@ def send_digest(drops: "list[PriceDrop]") -> None:
     html = template.render(
         drops=[_drop_to_dict(d) for d in drops],
         app_version=settings.app_version or None,
+        sale_price_threshold=settings.sale_price_threshold,
     )
 
     title = drops[0].item.get("title", "Watchlist item")
@@ -37,12 +38,17 @@ def send_digest(drops: "list[PriceDrop]") -> None:
 
 
 def _drop_to_dict(drop: "PriceDrop") -> dict[str, Any]:
+    has_prior_price = drop.last_price > 0.0
     return {
         "title": drop.item.get("title", "Watchlist item"),
         "currency": drop.currency,
-        "last_price": drop.last_price,
+        "last_price": drop.last_price if has_prior_price else None,
         "current_price": drop.current_price,
-        "drop_percent": (drop.last_price - drop.current_price) / drop.last_price * 100,
+        "drop_percent": (
+            (drop.last_price - drop.current_price) / drop.last_price * 100
+            if has_prior_price
+            else None
+        ),
         "quality": drop.quality,
         "image_url": drop.image_url,
         "trakt_url": drop.trakt_url,

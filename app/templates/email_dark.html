@@ -82,9 +82,14 @@
           {% endif %}
         </div>
         <div style="font-size:14px;">
-          {{ drop.currency }} {{ "%.2f" | format(drop.last_price) }}
-          &rarr; {{ drop.currency }} {{ "%.2f" | format(drop.current_price) }}
-          <span style="color:#34A853 !important;">({{ "%.1f" | format(drop.drop_percent) }}% off)</span>
+          {% if drop.last_price is not none %}
+            {{ drop.currency }} {{ "%.2f" | format(drop.last_price) }}
+            &rarr; {{ drop.currency }} {{ "%.2f" | format(drop.current_price) }}
+            <span style="color:#34A853 !important;">({{ "%.1f" | format(drop.drop_percent) }}% off)</span>
+          {% else %}
+            {{ drop.currency }} {{ "%.2f" | format(drop.current_price) }}
+            <span style="color:#34A853 !important;">(under {{ drop.currency }} {{ "%.2f" | format(sale_price_threshold) }})</span>
+          {% endif %}
           &nbsp;<span style="font-size:11px;color:#9AA0A6 !important;">{{ drop.quality }}</span>
           {% if drop.jw_url %}
             &nbsp;&middot;&nbsp;<a href="{{ drop.jw_url }}" style="font-size:11px;">JustWatch</a>

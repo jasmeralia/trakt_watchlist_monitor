@@ -48,6 +48,7 @@ def test_send_digest_sends_html_email(notify_module: object) -> None:
         smtp_to="recipient@example.com",
         email_theme="dark",
         app_version="",
+        sale_price_threshold=5.0,
     )
     smtp = MagicMock()
     smtp_context = MagicMock()
@@ -85,6 +86,7 @@ def test_send_digest_uses_plural_subject_for_multiple_drops(notify_module: objec
         smtp_to="recipient@example.com",
         email_theme="dark",
         app_version="",
+        sale_price_threshold=5.0,
     )
     smtp = MagicMock()
     smtp_context = MagicMock()
@@ -107,6 +109,7 @@ def test_send_digest_uses_smtp_ssl_for_port_465(notify_module: object) -> None:
         smtp_to="recipient@example.com",
         email_theme="dark",
         app_version="",
+        sale_price_threshold=5.0,
     )
     smtp = MagicMock()
     smtp_context = MagicMock()

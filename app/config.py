@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     smtp_to: str
 
     discount_threshold_percent: float = Field(default=20.0, gt=0, le=100)
+    sale_price_threshold: float = Field(default=5.0, ge=0)
     check_interval_hours: float = Field(default=24.0, gt=0)
     api_request_interval_seconds: float = Field(default=1.5, ge=0)
     db_path: str = "/data/prices.db"
