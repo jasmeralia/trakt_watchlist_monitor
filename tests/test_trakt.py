@@ -204,6 +204,64 @@ def test_get_watchlist_refresh_persists_tokens(
         settings.trakt_refresh_token = old_refresh_token
 
 
+def test_add_to_sale_list_posts_movie_to_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "sale_list_slug", "on-sale")
+    session = FakeSession([FakeResponse({"added": {"movies": 1}})])
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+
+    trakt.add_to_sale_list(123, "movie")
+
+    assert len(session.requests) == 1
+    req = session.requests[0]
+    assert req["method"] == "POST"
+    assert req["url"] == "https://api.trakt.tv/users/username/lists/on-sale/items"
+    assert req["json"] == {"movies": [{"ids": {"trakt": 123}}]}
+
+
+def test_add_to_sale_list_posts_show_to_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "sale_list_slug", "on-sale")
+    session = FakeSession([FakeResponse({"added": {"shows": 1}})])
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+
+    trakt.add_to_sale_list(456, "show")
+
+    req = session.requests[0]
+    assert req["json"] == {"shows": [{"ids": {"trakt": 456}}]}
+
+
+def test_remove_from_sale_list_posts_to_remove_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "sale_list_slug", "on-sale")
+    session = FakeSession([FakeResponse({"deleted": {"movies": 1}})])
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+
+    trakt.remove_from_sale_list(123, "movie")
+
+    req = session.requests[0]
+    assert req["method"] == "POST"
+    assert req["url"] == "https://api.trakt.tv/users/username/lists/on-sale/items/remove"
+    assert req["json"] == {"movies": [{"ids": {"trakt": 123}}]}
+
+
+def test_add_to_sale_list_noop_when_slug_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "sale_list_slug", "")
+    session = FakeSession([])
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+
+    trakt.add_to_sale_list(123, "movie")
+
+    assert len(session.requests) == 0
+
+
+def test_remove_from_sale_list_noop_when_slug_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "sale_list_slug", "")
+    session = FakeSession([])
+    monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
+
+    trakt.remove_from_sale_list(123, "movie")
+
+    assert len(session.requests) == 0
+
+
 def _session_factory(session: FakeSession) -> Callable[[], FakeSession]:
     return lambda: session
 

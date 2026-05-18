@@ -117,5 +117,65 @@ def log_notification(
     conn.commit()
 
 
+def reset_notification_state(conn: sqlite3.Connection) -> dict[str, int]:
+    # Restore price_history from the most recent non-zero original_price in notification_log.
+    # This lets the next check run re-detect the qualifying drop without corrupting history.
+    conn.execute(
+        """
+        UPDATE price_history
+        SET price = (
+            SELECT original_price
+            FROM notification_log
+            WHERE notification_log.trakt_id = price_history.trakt_id
+                AND notification_log.media_type = price_history.media_type
+                AND notification_log.quality = price_history.quality
+                AND original_price > 0.0
+            ORDER BY notified_at DESC
+            LIMIT 1
+        )
+        WHERE EXISTS (
+            SELECT 1 FROM notification_log
+            WHERE notification_log.trakt_id = price_history.trakt_id
+                AND notification_log.media_type = price_history.media_type
+                AND notification_log.quality = price_history.quality
+                AND original_price > 0.0
+        )
+        """
+    )
+    prices_restored = conn.execute("SELECT changes()").fetchone()[0]
+
+    # For items that were only ever first-observations-below-threshold (original_price=0.0),
+    # delete the price record so next run treats them as fresh first observations.
+    conn.execute(
+        """
+        DELETE FROM price_history
+        WHERE EXISTS (
+            SELECT 1 FROM notification_log
+            WHERE notification_log.trakt_id = price_history.trakt_id
+                AND notification_log.media_type = price_history.media_type
+                AND notification_log.quality = price_history.quality
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM notification_log
+            WHERE notification_log.trakt_id = price_history.trakt_id
+                AND notification_log.media_type = price_history.media_type
+                AND notification_log.quality = price_history.quality
+                AND original_price > 0.0
+        )
+        """
+    )
+    prices_cleared = conn.execute("SELECT changes()").fetchone()[0]
+
+    conn.execute("DELETE FROM notification_log")
+    notifications_cleared = conn.execute("SELECT changes()").fetchone()[0]
+
+    conn.commit()
+    return {
+        "prices_restored": prices_restored,
+        "prices_cleared": prices_cleared,
+        "notifications_cleared": notifications_cleared,
+    }
+
+
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
