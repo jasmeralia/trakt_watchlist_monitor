@@ -116,7 +116,13 @@ def test_get_effective_watchlist_filters_collection(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(trakt.requests, "Session", _session_factory(session))
 
     assert trakt.get_effective_watchlist() == [
-        {"trakt_id": 2, "media_type": "show", "title": "Severance", "tmdb_id": 95396, "trakt_slug": None}
+        {
+            "trakt_id": 2,
+            "media_type": "show",
+            "title": "Severance",
+            "tmdb_id": 95396,
+            "trakt_slug": None,
+        }
     ]
 
 

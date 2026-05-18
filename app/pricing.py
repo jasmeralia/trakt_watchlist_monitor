@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class PriceDrop:
+class PriceDrop:  # pylint: disable=too-many-instance-attributes
     item: dict[str, Any]
     trakt_id: int
     media_type: str
@@ -61,8 +61,6 @@ def _new_stats() -> dict[str, int]:
         "alert_failures": 0,
         "item_errors": 0,
     }
-
-
 
 
 def _format_prices(prices: list[dict[str, Any]]) -> str:
@@ -112,7 +110,7 @@ def _extract_item_fields(
     return trakt_id, media_type, tmdb_id
 
 
-def _process_watchlist_item(
+def _process_watchlist_item(  # pylint: disable=too-many-locals
     conn: sqlite3.Connection,
     item: dict[str, Any],
     item_fields: tuple[int, str, int],
@@ -128,7 +126,8 @@ def _process_watchlist_item(
         item.get("title", ""),
     )
 
-    prices, image_url, jw_url = justwatch.get_amazon_prices(tmdb_id, media_type, str(item.get("title", "")))
+    title = str(item.get("title", ""))
+    prices, image_url, jw_url = justwatch.get_amazon_prices(tmdb_id, media_type, title)
     logger.debug(
         "Prices seen for trakt_id=%d media_type=%s tmdb_id=%d: offer_count=%d offers=%s",
         trakt_id,
@@ -179,7 +178,9 @@ def _process_watchlist_item(
 
     if last_price != 0.0 and current_price < last_price:
         slug = item.get("trakt_slug")
-        trakt_url = f"https://trakt.tv/{media_type}s/{slug}" if isinstance(slug, str) and slug else None
+        trakt_url = (
+            f"https://trakt.tv/{media_type}s/{slug}" if isinstance(slug, str) and slug else None
+        )
         price_drop = PriceDrop(
             item=item,
             trakt_id=trakt_id,
@@ -192,7 +193,7 @@ def _process_watchlist_item(
             trakt_url=trakt_url,
             jw_url=jw_url,
         )
-        if _qualify_price_drop(conn, price_drop, stats):
+        if _qualify_price_drop(conn, price_drop):
             qualified_drops.append(price_drop)
             return
     else:
@@ -210,7 +211,6 @@ def _process_watchlist_item(
 def _qualify_price_drop(
     conn: sqlite3.Connection,
     price_drop: PriceDrop,
-    stats: dict[str, int],
 ) -> bool:
     drop_percent = (price_drop.last_price - price_drop.current_price) / price_drop.last_price * 100
     logger.debug(
@@ -274,8 +274,22 @@ def check_prices() -> None:
                 notify.send_digest(qualified_drops)
                 for drop in qualified_drops:
                     stats["prices_recorded"] += 1
-                    db.upsert_price(conn, drop.trakt_id, drop.media_type, drop.quality, drop.current_price, drop.currency)
-                    db.log_notification(conn, drop.trakt_id, drop.media_type, drop.quality, drop.current_price, drop.last_price)
+                    db.upsert_price(
+                        conn,
+                        drop.trakt_id,
+                        drop.media_type,
+                        drop.quality,
+                        drop.current_price,
+                        drop.currency,
+                    )
+                    db.log_notification(
+                        conn,
+                        drop.trakt_id,
+                        drop.media_type,
+                        drop.quality,
+                        drop.current_price,
+                        drop.last_price,
+                    )
                 stats["alerts_sent"] += len(qualified_drops)
             except (OSError, smtplib.SMTPException) as exc:
                 stats["alert_failures"] += len(qualified_drops)

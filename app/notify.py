@@ -21,8 +21,9 @@ def send_digest(drops: "list[PriceDrop]") -> None:
         app_version=settings.app_version or None,
     )
 
+    title = drops[0].item.get("title", "Watchlist item")
     if len(drops) == 1:
-        subject = f"[Trakt Watchlist Monitor] Price drop: {drops[0].item.get('title', 'Watchlist item')}"
+        subject = f"[Trakt Watchlist Monitor] Price drop: {title}"
     else:
         subject = f"[Trakt Watchlist Monitor] Price drops: {len(drops)} watchlist titles on sale"
 

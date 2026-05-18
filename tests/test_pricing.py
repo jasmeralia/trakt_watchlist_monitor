@@ -7,7 +7,6 @@ import pricing
 from pricing import meets_discount_threshold, select_best_quality
 
 
-
 class FakeConnection:
     def __init__(self) -> None:
         self.closed = False
@@ -269,7 +268,9 @@ class TestCheckPrices:
                 ]
             ),
         )
-        monkeypatch.setattr(pricing.justwatch, "get_amazon_prices", Mock(return_value=([], None, None)))
+        monkeypatch.setattr(
+            pricing.justwatch, "get_amazon_prices", Mock(return_value=([], None, None))
+        )
         monkeypatch.setattr(pricing.notify, "send_digest", send_digest)
         monkeypatch.setattr(pricing.db, "upsert_price", upsert_price)
 
