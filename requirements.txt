@@ -1,4 +1,4 @@
-requests>=2.32
+requests>=2.34.2
 python-dateutil>=2.9
 pydantic>=2.7
 pydantic-settings>=2.14.1
