@@ -144,13 +144,13 @@ After notifying, the new (lower) price is written to `price_history`.
 
 ```bash
 make venv       # create .venv and install all dependencies
-make lint-fix   # auto-fix ruff style/import issues
+make lintfix   # auto-fix ruff style/import issues
 make lint       # ruff + mypy + pylint + shellcheck + hadolint
 make test       # pytest
 make clean      # remove .venv and all caches
 ```
 
-All code changes must pass `make lint-fix && make lint && make test` before commit.
+All code changes must pass `make lintfix && make lint && make test` before commit.
 
 ## Release Process
 

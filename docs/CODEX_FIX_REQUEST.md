@@ -82,7 +82,7 @@ currency key, SMTP_SSL, season support) are explicitly out of scope here.
   in config.py for token-persistence).
 - Do not change the DB schema or add migrations.
 - Do not implement season lookup via JustWatch (out of scope).
-- All changes must pass `make lint-fix && make lint && make test`.
+- All changes must pass `make lintfix && make lint && make test`.
 - Follow existing project style (typed, ruff-formatted, pylint-clean).
 
 ## Success Criteria

@@ -134,13 +134,13 @@ cd app && python main.py
 
 ```bash
 make venv       # create .venv and install all dependencies (including dev tools)
-make lint-fix   # auto-fix formatting and import order with ruff
+make lintfix   # auto-fix formatting and import order with ruff
 make lint       # ruff + mypy + pylint + shellcheck + hadolint
 make test       # run pytest
 make clean      # remove .venv and all caches
 ```
 
-All changes must pass `make lint-fix && make lint && make test` before committing.
+All changes must pass `make lintfix && make lint && make test` before committing.
 See [AGENTS.md](AGENTS.md) for development rules and [docs/DESIGN.md](docs/DESIGN.md) for
 the architecture reference.
 
