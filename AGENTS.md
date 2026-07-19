@@ -5,7 +5,7 @@
 After any code change, run:
 
 ```bash
-make lint-fix && make lint && make test
+make lintfix && make lint && make test
 ```
 
 All three must pass before the task is considered complete.
@@ -25,7 +25,7 @@ All three must pass before the task is considered complete.
 
 - Python 3.12+ with strict mypy typing
 - Line length: 100 characters (enforced by ruff and pylint)
-- Formatting: ruff (run `make lint-fix` to auto-apply)
+- Formatting: ruff (run `make lintfix` to auto-apply)
 
 ## Architecture Reference
 

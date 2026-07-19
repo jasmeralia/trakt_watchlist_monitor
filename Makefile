@@ -5,7 +5,7 @@ MYPY   := $(VENV)/bin/mypy
 PYLINT := $(VENV)/bin/pylint
 PYTEST := $(VENV)/bin/pytest
 
-.PHONY: venv lint-fix lint test clean
+.PHONY: venv lintfix lint test clean
 
 .venv/bin/activate: requirements.txt requirements-dev.txt
 	python3 -m venv $(VENV)
@@ -14,7 +14,7 @@ PYTEST := $(VENV)/bin/pytest
 
 venv: .venv/bin/activate
 
-lint-fix: .venv/bin/activate
+lintfix: .venv/bin/activate
 	$(RUFF) check --fix app/ tests/
 	$(RUFF) format app/ tests/
 
